@@ -1,0 +1,706 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>FluxFilm — v8.3 (layout fixes)</title>
+<style>
+  :root{--bg:#f7fafc;--card:#fff;--muted:#6b7280;--accent:#2563eb;--danger:#ef4444}
+  body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;background:var(--bg);margin:0;color:#0f172a}
+  .wrap{max-width:920px;margin:0 auto;padding:12px}
+  header{display:flex;flex-direction:column;align-items:center;gap:6px;margin-bottom:12px}
+  h1{font-size:20px;margin:0}
+  .muted{color:var(--muted);font-size:13px}
+  .menu{display:flex;gap:8px;background:var(--card);padding:8px;border-radius:12px;box-shadow:0 1px 4px rgba(2,6,23,0.06);width:100%}
+  .tab{flex:1;text-align:center;padding:10px;border-radius:8px;cursor:pointer;user-select:none;background:#eef2ff}
+  .tab.active{background:var(--accent);color:#fff;font-weight:700}
+  .card{background:var(--card);border-radius:10px;padding:12px;box-shadow:0 1px 4px rgba(2,6,23,0.06);margin-top:12px}
+  input,select,textarea,button{font-family:inherit}
+  input,select,textarea{width:100%;padding:10px;border:1px solid #e6eef8;border-radius:10px;box-sizing:border-box;margin-top:6px}
+  button{padding:8px 12px;border-radius:10px;border:0;cursor:pointer;background:var(--accent);color:#fff}
+  .secondary{background:#fff;color:var(--accent);border:1px solid #dbeafe}
+  .danger{background:#fff;color:var(--danger);border:1px solid rgba(239,68,68,0.12)}
+  .list{display:flex;flex-direction:column;gap:12px;margin-top:12px}
+  .item{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;padding:12px;border-radius:10px;background:#f8fafc}
+  .left{display:flex;gap:12px;align-items:center;min-width:0}
+  .avatar{width:48px;height:48px;border-radius:8px;background:#eef2ff;display:flex;align-items:center;justify-content:center;font-weight:700;color:#1e40af;font-size:14px}
+  .meta{font-size:14px;min-width:0}
+  .muted-sm{color:var(--muted);font-size:13px}
+  .actions{display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+  .actions-row{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+  .badge{display:inline-block;padding:6px 10px;border-radius:999px;font-weight:700;font-size:13px}
+  .green{background:#dcfce7;color:#065f46}
+  .orange{background:#fffbeb;color:#92400e}
+  .red{background:#fee2e2;color:#7f1d1d}
+  .small{padding:6px 8px;border-radius:8px;background:#fff;color:var(--accent);border:1px solid #dbeafe;cursor:pointer}
+  .bulkbar{display:flex;gap:8px;align-items:center;margin-top:8px}
+  pre#log{font-size:12px;white-space:pre-wrap;color:var(--muted);margin:0}
+  .toast{position:fixed;left:12px;right:12px;bottom:12px;background:#fff;padding:12px;border-radius:10px;box-shadow:0 10px 30px rgba(2,6,23,.15);display:flex;justify-content:space-between;align-items:center;z-index:9999}
+  .inline-form{animation:slideUp .18s ease}
+  @keyframes slideUp{from{transform:translateY(6px);opacity:0}to{transform:none;opacity:1}}
+  @media(min-width:820px){ .layout{display:grid;grid-template-columns:320px 1fr;gap:12px} .leftCol{display:block} }
+  .chartRow{display:grid;grid-template-columns:1fr;gap:12px}
+  @media(min-width:920px){ .chartRow{grid-template-columns:1fr 1fr} }
+  .chartCard{padding:12px;border-radius:8px;background:#fff;box-shadow:0 1px 6px rgba(2,6,23,0.04)}
+  canvas{width:100%;height:220px}
+
+  /* NEW / FIXES */
+  /* place account action buttons inline under notes */
+  .acct-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  /* customer card buttons - horizontal and wrap */
+  .cust-actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+  /* small private badge */
+  .private-badge { display:inline-block; background:#fffbeb; color:#92400e; padding:2px 6px; border-radius:999px; font-weight:700; margin-left:6px; font-size:12px; vertical-align:middle; }
+  /* ensure actions column doesn't force vertical stacking */
+  @media(max-width:819px){
+    .item{flex-direction:column; align-items:flex-start}
+    .actions{align-self:stretch}
+  }
+</style>
+
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#2563eb">
+  <link rel="icon" href="icons/icon-192.png">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🍿 FluxFilm</h1>
+    <div class="muted">v8.3 — layout fixes</div>
+    <div style="width:100%"><input id="globalSearch" placeholder="Universal search — email, customer, profile..." /></div>
+    <div class="menu" style="margin-top:10px">
+      <div id="tabAll" class="tab active">All</div>
+      <div id="tabAccounts" class="tab">Accounts</div>
+      <div id="tabCustomers" class="tab">Customers</div>
+      <div id="tabBusiness" class="tab">Business</div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <div class="leftCol" id="leftColumn">
+      <div class="card">
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="newPlatformName" placeholder="New platform name e.g. Disney+" />
+          <button id="addPlatformBtn" class="small">Add</button>
+        </div>
+        <div style="margin-top:12px;font-weight:700">Platforms</div>
+        <div id="platformsList" class="list"></div>
+      </div>
+    </div>
+
+    <main>
+      <section id="viewAll" class="card" aria-hidden="false">
+        <div class="controls" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button id="addAccBtn">Add Account</button>
+          <button id="exportBtn" class="small secondary">Export JSON</button>
+          <button id="exportCsvBtn" class="small secondary">Export CSV</button>
+          <label class="small secondary">Import <input id="fileImport" type="file" accept=".json" style="display:none" /></label>
+          <button id="clearBtn" class="small secondary">Clear All</button>
+          <label class="small" style="margin-left:auto"><input type="checkbox" id="maskToggle" checked/> Mask passwords</label>
+        </div>
+
+        <div id="searchResults" style="margin-top:12px"></div>
+
+        <div id="addAccountInline" class="inline-form" style="display:none;margin-top:12px"></div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap">
+          <label>Filter
+            <select id="allFilter" class="small"><option value="all">All</option><option value="expired">Expired</option><option value="soon">Expiring soon (≤7d)</option></select>
+          </label>
+          <label>Platform
+            <select id="filterPlatform" class="small"><option value="">All</option></select>
+          </label>
+          <label>Sort
+            <select id="allSort" class="small"><option value="recent">Newest</option><option value="expiry_asc">Expiry — Earliest</option><option value="expiry_desc">Expiry — Latest</option></select>
+          </label>
+        </div>
+        <div id="allList" class="list" aria-live="polite"></div>
+      </section>
+
+      <section id="viewAccounts" class="card" style="display:none">
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="accountSearch" placeholder="Search accounts..." style="flex:1" />
+          <button id="addAccountBtn2" class="small">Add account</button>
+        </div>
+        <div id="addAccountInlineAccounts" class="inline-form" style="display:none;margin-top:12px"></div>
+        <div id="platformAccounts" class="list" style="margin-top:12px"></div>
+      </section>
+
+      <section id="viewCustomers" class="card" style="display:none">
+        <div style="display:flex;gap:8px;align-items:center">
+          <select id="customerSort" class="small"><option value="name">Sort: Name</option><option value="expiry_asc">Earliest expiry</option><option value="expiry_desc">Latest expiry</option></select>
+          <button id="addCustomerBtn" class="small">Add customer</button>
+          <button id="exportCustomersBtn" class="small secondary" style="margin-left:auto">Export customers</button>
+        </div>
+        <div class="bulkbar" id="bulkBar" style="display:none">
+          <label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="bulkSelectAll"/> Select all</label>
+          <button id="bulkRemindBtn" class="small secondary">Remind selected</button>
+          <button id="bulkCopyBtn" class="small secondary">Copy selected details</button>
+        </div>
+        <div id="addCustomerInline" class="inline-form" style="display:none;margin-top:12px"></div>
+        <div id="customersList" class="list" style="margin-top:12px"></div>
+      </section>
+
+      <section id="viewBusiness" class="card" style="display:none">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="font-weight:700">Business overview</div>
+          <div class="muted-sm">Insights: customers & platform sales</div>
+        </div>
+
+        <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap; align-items:center">
+          <button id="bizWeek" class="small secondary">This week</button>
+          <button id="bizMonth" class="small secondary">This month</button>
+          <button id="bizLastMonth" class="small secondary">Last month</button>
+          <div style="display:flex;gap:6px;align-items:center;margin-left:6px">
+            <label>From <input id="bizFrom" type="month" class="small" style="width:150px"/></label>
+            <label>To <input id="bizTo" type="month" class="small" style="width:150px"/></label>
+            <button id="bizShow" class="small secondary">Show</button>
+          </div>
+        </div>
+        <!-- CHARTS: stacked on small screens, side-by-side on wide screens -->
+        <div class="chartRow" style="margin-top:12px">
+          <div class="chartCard">
+            <div style="font-weight:700;margin-bottom:6px">Customers by platform</div>
+            <canvas id="platformChart"></canvas>
+          </div>
+          <div class="chartCard">
+            <div style="font-weight:700;margin-bottom:6px">Monthly new customers (last 6 months)</div>
+            <canvas id="monthlyChart"></canvas>
+          </div>
+        </div>
+
+        <div style="margin-top:12px" id="businessStats" class="muted-sm"></div>
+      </section>
+
+    </main>
+  </div>
+
+  <div class="card" style="margin-top:12px"><div class="muted-sm">Tip: Export to back up.</div></div>
+  <div class="card" style="margin-top:12px"><div class="muted-sm">Debug:</div><pre id="log">loaded v8.3 (layout fix)</pre></div>
+</div>
+
+<div id="toastRoot"></div>
+
+<script>
+/* FluxFilm v8.3 layout fixes
+   - dates shown DD-MM-YYYY
+   - account action buttons below notes
+   - customers expiry inline with name, private badge visible
+   - customer action buttons moved below notes, horizontal/wrapping
+*/
+
+const KEY='fluxfilm_v8_3_fix'
+
+// small util and logging
+function nowLog(s){ const p=document.getElementById('log'); p.textContent = new Date().toISOString().slice(11,19) + ' - ' + s + '\n' + p.textContent }
+function uid(){ return Math.random().toString(36).slice(2,9) }
+function daysLeft(dateStr){ if(!dateStr) return null; const d=new Date(dateStr); d.setHours(0,0,0,0); const n=new Date(); n.setHours(0,0,0,0); return Math.ceil((d-n)/(1000*60*60*24)) }
+function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
+async function robustCopy(text){ try{ if(navigator.clipboard && navigator.clipboard.writeText){ await navigator.clipboard.writeText(text); return true } }catch(e){} try{ const ta=document.createElement('textarea'); ta.value=text; ta.style.position='fixed'; ta.style.left='-9999px'; document.body.appendChild(ta); ta.select(); const ok=document.execCommand('copy'); document.body.removeChild(ta); return !!ok }catch(e){return false} }
+
+// NEW: format YYYY-MM-DD -> DD-MM-YYYY (if input not in that form, return raw escaped)
+function fmtDate(dstr){
+  if(!dstr) return ''
+  // handle ISO-like YYYY-MM-DD
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dstr)
+  if(m) return `${m[3]}-${m[2]}-${m[1]}`
+  // fallback
+  return esc(dstr)
+}
+
+function loadState(){ try{ const raw = localStorage.getItem(KEY); if(raw) return JSON.parse(raw) }catch(e){} return { platforms:[ {id:'p_netflix',name:'Netflix'},{id:'p_prime',name:'Prime'},{id:'p_hotstar',name:'Hotstar'},{id:'p_yt',name:'YT Premium'} ], accounts:[], customers:[] } }
+function saveState(s){ localStorage.setItem(KEY, JSON.stringify(s)); nowLog('state saved') }
+
+let state = loadState()
+let selectedPlatformId = null
+let lastDeleted = null
+
+if(state.accounts.length===0){
+  state.accounts.unshift({ id:'a_'+uid(), platformId:'p_netflix', email:'vs.e.s4.6.33@gmail.com', password:'WatchEmilyinParis', startDate:'2025-09-01', expiryDate:'2025-10-01', notes:'Demo', customers:[], createdAt:Date.now() })
+  saveState(state)
+}
+
+// DOM refs
+const tabAll = document.getElementById('tabAll'), tabAccounts = document.getElementById('tabAccounts'), tabCustomers = document.getElementById('tabCustomers'), tabBusiness = document.getElementById('tabBusiness')
+const viewAll = document.getElementById('viewAll'), viewAcc = document.getElementById('viewAccounts'), viewCust = document.getElementById('viewCustomers'), viewBiz = document.getElementById('viewBusiness')
+const platformsList = document.getElementById('platformsList'), platformAccounts = document.getElementById('platformAccounts')
+const allList = document.getElementById('allList'), customersList = document.getElementById('customersList')
+const searchResults = document.getElementById('searchResults')
+
+// tabs
+tabAll.onclick = ()=> setTab('all'); tabAccounts.onclick = ()=> setTab('accounts'); tabCustomers.onclick = ()=> setTab('customers'); tabBusiness.onclick = ()=> setTab('business')
+function setTab(t){
+  tabAll.classList.remove('active'); tabAccounts.classList.remove('active'); tabCustomers.classList.remove('active'); tabBusiness.classList.remove('active')
+  viewAll.style.display='none'; viewAcc.style.display='none'; viewCust.style.display='none'; viewBiz.style.display='none'
+  if(t==='all'){ tabAll.classList.add('active'); viewAll.style.display='' }
+  if(t==='accounts'){ tabAccounts.classList.add('active'); viewAcc.style.display=''; document.getElementById('leftColumn').style.display='' }
+  else document.getElementById('leftColumn').style.display='none'
+  if(t==='customers'){ tabCustomers.classList.add('active'); viewCust.style.display='' }
+  if(t==='business'){ tabBusiness.classList.add('active'); viewBiz.style.display=''; renderBusiness() }
+  renderPlatforms(); renderAll(); renderAccounts(); renderCustomers()
+}
+
+// render platforms
+function renderPlatforms(){
+  platformsList.innerHTML = ''
+  state.platforms.forEach(p=>{
+    const div = document.createElement('div'); div.className='item'; div.style.cursor='pointer'
+    const cnt = state.accounts.filter(a=>a.platformId===p.id).length
+    div.innerHTML = `<div class="left"><div class="avatar">${esc(p.name.slice(0,2).toUpperCase())}</div><div class="meta"><div style="font-weight:700">${esc(p.name)}</div><div class="muted-sm">${cnt} accounts</div></div></div>`
+    const btns = document.createElement('div'); btns.className='actions-row'
+    const openBtn = document.createElement('button'); openBtn.className='small'; openBtn.textContent='Open'; openBtn.onclick = (e)=>{ e.stopPropagation(); selectedPlatformId = p.id; setTab('accounts'); nowLog('Selected platform '+p.name) }
+    const renameBtn = document.createElement('button'); renameBtn.className='small'; renameBtn.textContent='Rename'; renameBtn.onclick = (e)=>{ e.stopPropagation(); const nv = prompt('New name for platform', p.name); if(nv===null) return; const newName = nv.trim(); const newImage = prompt('Image URL (leave blank to remove)', p.imageUrl || ''); if(newName) p.name = newName; p.imageUrl = newImage ? newImage.trim() : null; saveState(state); renderPlatforms(); renderAccounts(); nowLog('Renamed/edited platform '+p.name) }
+    const delBtn = document.createElement('button'); delBtn.className='danger'; delBtn.textContent='Delete'; delBtn.onclick = (e)=>{ e.stopPropagation(); handlePlatformDelete(p.id) }
+    btns.appendChild(openBtn); btns.appendChild(renameBtn); btns.appendChild(delBtn)
+    div.appendChild(btns)
+    platformsList.appendChild(div)
+  })
+}
+
+// platform delete with merge
+function handlePlatformDelete(platformId){
+  const platform = state.platforms.find(p=>p.id===platformId); if(!platform) return
+  const wantsMerge = confirm(`Delete platform "${platform.name}" — press OK to MERGE its accounts into another platform, Cancel to delete without merging.`)
+  if(wantsMerge){
+    const targets = state.platforms.filter(p=>p.id!==platformId)
+    if(targets.length===0){ if(!confirm('No other platforms to merge into. Delete anyway?')) return; else { doDeletePlatform(platformId); return } }
+    const listStr = targets.map((t,i)=> `${i+1}. ${t.name}`).join('\n')
+    const input = prompt(`Choose target to merge accounts into (enter number):\n${listStr}`)
+    if(!input) return
+    const idx = parseInt(input,10) - 1
+    if(isNaN(idx) || idx<0 || idx>=targets.length){ alert('Invalid selection'); return }
+    const target = targets[idx]
+    state.accounts.forEach(a=>{ if(a.platformId===platformId) a.platformId = target.id })
+    state.platforms = state.platforms.filter(p=>p.id!==platformId)
+    saveState(state); renderPlatforms(); renderAccounts(); renderAll(); renderCustomers(); nowLog(`Merged platform ${platform.name} -> ${target.name}`); toast(`Merged ${platform.name} into ${target.name}`)
+    return
+  } else {
+    if(!confirm(`Are you sure? This will unlink accounts from ${platform.name} (accounts remain with no platform).`)) return
+    doDeletePlatform(platformId)
+  }
+}
+function doDeletePlatform(platformId){
+  const platform = state.platforms.find(p=>p.id===platformId)
+  state.platforms = state.platforms.filter(p=>p.id!==platformId)
+  state.accounts.forEach(a=>{ if(a.platformId===platformId) a.platformId = null })
+  saveState(state); renderPlatforms(); renderAccounts(); renderAll(); renderCustomers(); nowLog('Deleted platform '+(platform?platform.name:'(unknown)')); toast('Platform deleted')
+}
+document.getElementById('addPlatformBtn').onclick = ()=>{ const n=document.getElementById('newPlatformName').value.trim(); if(!n){alert('Enter platform name');return} state.platforms.unshift({id:'p_'+uid(), name:n}); saveState(state); document.getElementById('newPlatformName').value=''; renderPlatforms(); toast('Platform added') }
+
+// inline account
+function openAccountInline(container, editId=null){
+  const acc = editId ? state.accounts.find(a=>a.id===editId) : {}
+  container.innerHTML = `<div class="card">
+    <div style="font-weight:700">${editId? 'Edit account':'Add account'}</div>
+    <label>Platform</label>
+    <select id="ia_platform"><option value="">-- optional --</option>${state.platforms.map(p=>`<option value="${p.id}" ${acc.platformId===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select>
+    <label>Email</label><input id="ia_email" value="${esc(acc.email||'')}" placeholder="email"/>
+    <label>Password</label><input id="ia_password" value="${esc(acc.password||'')}" placeholder="password"/>
+    <div style="display:flex;gap:8px;margin-top:6px"><div style="flex:1"><label>Start</label><input id="ia_start" type="date" value="${acc.startDate||''}" /></div><div style="flex:1"><label>Expiry</label><input id="ia_expiry" type="date" value="${acc.expiryDate||''}" /></div></div>
+    <label>Notes</label><textarea id="ia_notes">${esc(acc.notes||'')}</textarea>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px"><button id="ia_cancel" class="secondary">Cancel</button><button id="ia_save" class="secondary">${editId?'Save':'Add'}</button></div>
+  </div>`
+  container.style.display='block'; setTimeout(()=>document.getElementById('ia_email').focus(),50)
+  document.getElementById('ia_cancel').onclick = ()=>{ container.style.display='none'; container.innerHTML='' }
+  document.getElementById('ia_save').onclick = ()=>{
+    const plat = document.getElementById('ia_platform').value || null
+    const email = document.getElementById('ia_email').value.trim(); if(!email){ alert('Email required'); return }
+    const obj = {
+      id: editId ? editId : 'a_'+uid(),
+      platformId: plat,
+      email,
+      password: document.getElementById('ia_password').value,
+      startDate: document.getElementById('ia_start').value,
+      expiryDate: document.getElementById('ia_expiry').value,
+      notes: document.getElementById('ia_notes').value,
+      customers: editId ? (state.accounts.find(a=>a.id===editId).customers||[]) : [],
+      createdAt: editId ? state.accounts.find(a=>a.id===editId).createdAt : Date.now()
+    }
+    if(editId) state.accounts = state.accounts.map(a=> a.id===editId ? obj : a)
+    else state.accounts.unshift(obj)
+    saveState(state); container.style.display='none'; container.innerHTML=''; renderPlatforms(); renderAccounts(); renderAll(); nowLog((editId?'Saved ':'Added ')+email)
+  }
+}
+document.getElementById('addAccBtn').onclick = ()=> openAccountInline(document.getElementById('addAccountInline'))
+document.getElementById('addAccountBtn2').onclick = ()=> openAccountInline(document.getElementById('addAccountInlineAccounts'))
+
+function badgeHtmlForDays(days){
+  if(days===null) return '<span class="badge" style="background:#eef2ff;color:#1e3a8a">• No expiry</span>'
+  if(days<=0) return '<span class="badge red">⚠️ Expired</span>'
+  if(days<=7) return '<span class="badge orange">⏳ '+days+'d</span>'
+  return '<span class="badge green">✅ '+days+'d</span>'
+}
+
+function populateFilterPlatform(){ const sel=document.getElementById('filterPlatform'); sel.innerHTML='<option value="">All</option>'; state.platforms.forEach(p=>{ const o=document.createElement('option'); o.value=p.id; o.textContent=p.name; sel.appendChild(o) }) }
+
+function toast(msg, t=1400){ const root=document.getElementById('toastRoot'); const el=document.createElement('div'); el.className='toast'; el.innerHTML=`<div>${esc(msg)}</div>`; root.appendChild(el); setTimeout(()=>{ try{ root.removeChild(el) }catch(e){} }, t) }
+
+async function handleCopyText(text, successMsg='Copied to clipboard'){ const ok = await robustCopy(text); if(ok){ toast(successMsg); nowLog('Copied text') } else alert('Copy failed — select and copy manually') }
+
+// render search results (top area)
+function renderSearchResults(q){
+  const root=searchResults; root.innerHTML=''
+  if(!q) return
+  const custMatches = state.customers.filter(c => (c.name||'').toLowerCase().includes(q) || (c.phone||'').toLowerCase().includes(q) || (c.profile||'').toLowerCase().includes(q))
+  const accMatches = state.accounts.filter(a => (a.email||'').toLowerCase().includes(q) || (a.notes||'').toLowerCase().includes(q) || (a.profileName||'').toLowerCase().includes(q))
+  if(custMatches.length>0){
+    const h=document.createElement('div'); h.className='card'; h.style.marginBottom='8px'; h.innerHTML=`<div style="font-weight:700">Customer results</div>`; root.appendChild(h)
+    custMatches.forEach(c=>{
+      const div=document.createElement('div'); div.className='item'
+      const accs=(c.accounts||[]).map(aid=> state.accounts.find(a=>a.id===aid)).filter(Boolean)
+      div.innerHTML=`<div class="left"><div class="avatar">${esc((c.name||'').slice(0,2).toUpperCase())}</div><div class="meta"><div style="font-weight:700">${esc(c.name)}</div><div class="muted-sm">${esc(c.phone||'')}</div>${accs.length? '<div style="margin-top:6px" class="muted-sm">Assigned: '+ accs.map(a=>esc(a.email)).join(', ') + '</div>' : '<div class="muted-sm">No accounts assigned</div>'}</div></div>`
+      const right=document.createElement('div'); right.className='actions'; const open=document.createElement('button'); open.className='small'; open.textContent='Open'; open.onclick=()=>{ setTab('customers'); setTimeout(()=>renderCustomers(),100) }; right.appendChild(open); div.appendChild(right); h.appendChild(div)
+    })
+  }
+  if(accMatches.length>0){
+    const h2=document.createElement('div'); h2.className='card'; h2.style.marginTop='8px'; h2.innerHTML=`<div style="font-weight:700">Account results</div>`; root.appendChild(h2)
+    accMatches.forEach(a=>{
+      const p=state.platforms.find(x=>x.id===a.platformId)||{name:'Other'}
+      const div=document.createElement('div'); div.className='item'; div.innerHTML=`<div class="left"><div class="avatar">${esc(p.name.slice(0,2).toUpperCase())}</div><div class="meta"><div style="font-weight:700">${esc(a.email)} <span class="small-muted">(${esc(p.name)})</span></div><div class="muted-sm">${esc(a.notes||'')}</div></div></div>`
+      const right=document.createElement('div'); right.className='actions'; const open=document.createElement('button'); open.className='small'; open.textContent='Open'; open.onclick=()=>{ selectedPlatformId=a.platformId; setTab('accounts'); setTimeout(()=>{ document.getElementById('accountSearch').value=a.email; renderAccounts() },100) }; right.appendChild(open); div.appendChild(right); h2.appendChild(div)
+    })
+  }
+  if(custMatches.length===0 && accMatches.length===0){ const no=document.createElement('div'); no.className='muted-sm'; no.textContent='No matches'; root.appendChild(no) }
+}
+
+// render All
+function renderAll(){
+  populateFilterPlatform()
+  searchResults.innerHTML=''
+  const q=(document.getElementById('globalSearch').value||'').trim().toLowerCase()
+  if(q) renderSearchResults(q)
+  const filterPlatform=document.getElementById('filterPlatform').value
+  const filter=document.getElementById('allFilter').value
+  const sort=document.getElementById('allSort').value
+  const mask=document.getElementById('maskToggle').checked
+  let accounts = state.accounts.filter(a=>{
+    if(!q) return true
+    if((a.email||'').toLowerCase().includes(q)) return true
+    if((a.notes||'').toLowerCase().includes(q)) return true
+    const assignedNames = (a.customers||[]).map(cid=>(state.customers.find(c=>c.id===cid)||{name:''}).name).join(' ')
+    if(assignedNames.toLowerCase().includes(q)) return true
+    return false
+  })
+  if(filterPlatform) accounts = accounts.filter(a=> a.platformId===filterPlatform)
+  accounts = accounts.filter(a=>{
+    const days = a.expiryDate ? daysLeft(a.expiryDate) : null
+    if(filter==='expired' && (days===null || days>0)) return false
+    if(filter==='soon' && (days===null || days>7)) return false
+    return true
+  })
+  if(sort === 'expiry_asc') accounts.sort((a,b)=> ( (a.expiryDate?new Date(a.expiryDate).getTime():Infinity) - (b.expiryDate?new Date(b.expiryDate).getTime():Infinity) ))
+  if(sort === 'expiry_desc') accounts.sort((a,b)=> ( (b.expiryDate?new Date(b.expiryDate).getTime():0) - (a.expiryDate?new Date(a.expiryDate).getTime():0) ))
+  if(sort === 'recent') accounts.sort((a,b)=> (b.createdAt||0)-(a.createdAt||0))
+  const root=allList; root.innerHTML=''
+  if(accounts.length===0){ root.innerHTML='<div class="muted-sm">No accounts yet</div>'; return }
+  accounts.forEach(a=>{
+    const p=state.platforms.find(x=>x.id===a.platformId)||{name:'Other'}
+    const days=a.expiryDate?daysLeft(a.expiryDate):null
+    const customersAssigned = (a.customers||[]).map(cid=>{ const c=state.customers.find(cx=>cx.id===cid); return c? `${esc(c.name)}${c.expiryDate? ' — ' + fmtDate(c.expiryDate):''}` : '?' }).join('<br>')
+    const pwd = mask ? (a.password ? '••••••' : '') : (a.password||'')
+    const div=document.createElement('div'); div.className='item'
+    div.innerHTML = `<div class="left"><div class="avatar">${esc(p.name.slice(0,2).toUpperCase())}</div><div class="meta"><div style="font-weight:700">${esc(p.name)} — ${esc(a.email)} ${a.expiryDate?'<span style="margin-left:8px;font-weight:700">📅 '+fmtDate(a.expiryDate)+'</span>':''}</div><div class="muted-sm">${a.password? '(pwd saved)':''}</div><div class="muted-sm" style="margin-top:6px">Assigned:</div><div style="margin-top:4px" class="muted-sm">${customersAssigned||'—'}</div><div style="margin-top:8px">${badgeHtmlForDays(days)} <span style="margin-left:8px;font-weight:700">${days===null? '' : (days<=0? 'Expired' : days+' days left')}</span></div><div class="muted-sm" style="margin-top:8px">Pwd: ${esc(pwd)}</div><div class="muted-sm">Notes: ${esc(a.notes||'—')}</div></div></div>`
+    const right=document.createElement('div'); right.className='actions'
+    const editBtn=document.createElement('button'); editBtn.className='small'; editBtn.textContent='Edit'; editBtn.onclick=()=> openAccountInline(document.getElementById('addAccountInline'), a.id)
+    const copyBtn=document.createElement('button'); copyBtn.className='small'; copyBtn.textContent='Copy'; copyBtn.onclick=async ()=>{
+      const text = `🍿 FluxFilm\nHi,\n\n📧 Email: ${a.email}\n🔐 Password: ${a.password||''}\n🗓 Expiry: ${a.expiryDate||''}`
+      const ok = await robustCopy(text); if(ok){ toast('Copied credentials to clipboard'); nowLog('Copied creds for '+a.email) } else alert('Copy failed — select & copy manually')
+    }
+    const waBtn=document.createElement('button'); waBtn.className='small'; waBtn.textContent='WhatsApp'
+    waBtn.onclick = ()=>{ const firstCust = (a.customers && a.customers.length>0) ? (state.customers.find(c=>c.id===a.customers[0])||{name:''}).name : ''; const msg = `🍿 *FluxFilm*\nHi ${firstCust||''},\n\n📧 *Email:* ${a.email}\n🔐 *Password:* ${a.password||'—'}\n🗓️ *Expiry:* ${a.expiryDate||'—'}\n\nEnjoy!`; if(confirm('Open WhatsApp to send message? (Cancel to copy)')) location.href = 'https://wa.me/?text=' + encodeURIComponent(msg); else robustCopy(msg).then(ok=> ok? toast('Message copied') : alert('Copy failed')) }
+    const remindBtn=document.createElement('button'); remindBtn.className='small'; remindBtn.textContent='Remind'
+    remindBtn.onclick = ()=>{ const msg = `🔔 *Reminder*\nHi ${(a.customers&&a.customers.length)? (state.customers.find(c=>c.id===a.customers[0])||{name:''}).name : ''},\n\nYour subscription (${a.email}) expires on *${a.expiryDate||'—'}*. Please renew.\n\nThanks,\nFluxFilm`; if(confirm('Open WhatsApp to send reminder? (Cancel to copy)')) location.href = 'https://wa.me/?text=' + encodeURIComponent(msg); else robustCopy(msg).then(ok=> ok? toast('Reminder copied') : alert('Copy failed')) }
+    const delBtn=document.createElement('button'); delBtn.className='danger'; delBtn.textContent='Delete'; delBtn.onclick=()=>{ if(confirm('Delete this account?')){ lastDeleted={type:'account',data:a,time:Date.now()}; state.accounts=state.accounts.filter(x=>x.id!==a.id); state.customers.forEach(c=>{ if(c.accounts) c.accounts=c.accounts.filter(ac=>ac!==a.id) }); saveState(state); renderAll(); renderAccounts(); renderCustomers(); showUndo() } }
+    right.appendChild(editBtn); right.appendChild(copyBtn); right.appendChild(waBtn); right.appendChild(remindBtn); right.appendChild(delBtn)
+    div.appendChild(right); root.appendChild(div)
+  })
+}
+
+// render Accounts (platform)
+function renderAccounts(){
+  platformAccounts.innerHTML=''
+  if(!selectedPlatformId){ platformAccounts.innerHTML='<div class="muted-sm">Click a platform on the left to see its accounts.</div>'; return }
+  const p = state.platforms.find(x=>x.id===selectedPlatformId); if(!p){ platformAccounts.innerHTML='<div class="muted-sm">Platform not found.</div>'; return }
+  const q=(document.getElementById('accountSearch').value||'').toLowerCase()
+  const accounts = state.accounts.filter(a=> a.platformId===p.id && (!q || (a.email||'').toLowerCase().includes(q))).sort((a,b)=> (b.createdAt||0)-(a.createdAt||0))
+  const sect=document.createElement('div'); sect.className='card'; sect.style.padding='10px'; sect.innerHTML=`<div style="font-weight:700">${esc(p.name)}</div>`
+  if(accounts.length===0){ sect.innerHTML += '<div class="muted-sm" style="margin-top:8px">No accounts on this platform. Click Add account to create one.</div>'; platformAccounts.appendChild(sect); return }
+  accounts.forEach(a=>{
+    const days = a.expiryDate ? daysLeft(a.expiryDate) : null
+    const d=document.createElement('div'); d.className='item'; d.style.marginTop='8px'; d.style.alignItems='center'
+    const customersForAcc = (a.customers||[]).map(cid=> state.customers.find(c=>c.id===cid)).filter(Boolean)
+    // Build customers list; show name and date inline with dd-mm-yyyy; show private badge if set; include emoji/indicator for soon
+    const custHtml = customersForAcc.length ? customersForAcc.map(c => {
+      const cDays = c.expiryDate ? daysLeft(c.expiryDate) : null
+      const dayLabel = cDays===null ? '' : (cDays<=0 ? '⚠️ ' : (cDays<=7 ? '⏳ ' : '✅ '))
+      const privateBadge = c.private ? '<span class="private-badge">P</span>' : ''
+      return `<div style="margin-top:6px"><b>${esc(c.name)}</b> ${privateBadge} • ${dayLabel}${c.expiryDate? fmtDate(c.expiryDate) : '—'}</div>`
+    }).join('') : '<div class="muted-sm">No customers yet</div>'
+    // avatar
+    d.innerHTML = `<div class="left"><div class="avatar">${p.imageUrl? `<img src="${esc(p.imageUrl)}" style="width:48px;height:48px;border-radius:8px;object-fit:cover"/>` : esc(p.name.slice(0,2).toUpperCase())}</div><div class="meta"><div style="font-weight:700">${esc(a.email)} ${a.expiryDate?'<span style="margin-left:8px;font-weight:700">📅 '+fmtDate(a.expiryDate)+'</span>':''}</div><div class="muted-sm">Start: ${a.startDate?fmtDate(a.startDate):'—'} • Expiry: ${a.expiryDate?fmtDate(a.expiryDate):'—'}</div><div style="margin-top:8px">${badgeHtmlForDays(days)} <strong style="margin-left:8px">${days===null? '' : (days<=0? 'Expired' : days+' days left')}</strong></div><div style="margin-top:8px" class="muted-sm">Customers assigned:</div>${custHtml}<div class="muted-sm" style="margin-top:8px">Notes: ${esc(a.notes||'—')}</div><div class="acct-actions" id="acct_actions_${a.id}"></div></div></div>`
+    // Instead of appending a right column, place action buttons inside the acct_actions_* container (so they sit below notes)
+    const actionsContainer = d.querySelector(`#acct_actions_${a.id}`)
+    const edit=document.createElement('button'); edit.className='small'; edit.textContent='Edit'; edit.onclick=()=> openAccountInline(document.getElementById('addAccountInlineAccounts'), a.id)
+    const addCust=document.createElement('button'); addCust.className='small'; addCust.textContent='Add customer'; addCust.onclick=()=> toggleAddCustomerInline(a.id)
+    const copy=document.createElement('button'); copy.className='small'; copy.textContent='Copy'; copy.onclick=async ()=>{ const text=`🍿 FluxFilm\nHi,\n\n📧 Email: ${a.email}\n🔐 Password: ${a.password||''}\n🗓 Expiry: ${a.expiryDate||''}`; const ok=await robustCopy(text); if(ok) toast('Copied credentials'); else alert('Copy failed') }
+    const wa=document.createElement('button'); wa.className='small'; wa.textContent='WhatsApp'; wa.onclick=()=>{ const firstCust=(a.customers && a.customers.length>0)? (state.customers.find(c=>c.id===a.customers[0])||{name:''}).name : ''; const msg=`🍿 *FluxFilm*\nHi ${firstCust||''},\n\n📧 *Email:* ${a.email}\n🔐 *Password:* ${a.password||'—'}\n🗓️ *Expiry:* ${a.expiryDate||'—'}\n\nEnjoy!`; if(confirm('Open WhatsApp to send message? (Cancel to copy)')) location.href='https://wa.me/?text='+encodeURIComponent(msg); else robustCopy(msg).then(ok=> ok? toast('Message copied') : alert('Copy failed')) }
+    const remind=document.createElement('button'); remind.className='small'; remind.textContent='Remind'; remind.onclick=()=>{ const msg=`🔔 *Reminder*\nHi ${(a.customers&&a.customers.length)? (state.customers.find(c=>c.id===a.customers[0])||{name:''}).name : ''},\n\nYour subscription (${a.email}) expires on *${a.expiryDate||'—'}*. Please renew.\n\nThanks,\nFluxFilm`; if(confirm('Open WhatsApp to send reminder? (Cancel to copy)')) location.href='https://wa.me/?text='+encodeURIComponent(msg); else robustCopy(msg).then(ok=> ok? toast('Reminder copied') : alert('Copy failed')) }
+    const del=document.createElement('button'); del.className='danger'; del.textContent='Delete'; del.onclick=()=>{ if(confirm('Delete account?')){ lastDeleted={type:'account',data:a,time:Date.now()}; state.accounts=state.accounts.filter(x=>x.id!==a.id); state.customers.forEach(c=>{ if(c.accounts) c.accounts=c.accounts.filter(cid=>cid!==a.id) }); saveState(state); renderAccounts(); renderCustomers(); renderAll(); showUndo() } }
+    // append in readable order
+    actionsContainer.appendChild(edit)
+    actionsContainer.appendChild(addCust)
+    actionsContainer.appendChild(copy)
+    actionsContainer.appendChild(wa)
+    actionsContainer.appendChild(remind)
+    actionsContainer.appendChild(del)
+
+    sect.appendChild(d)
+  })
+  platformAccounts.appendChild(sect)
+}
+
+// Add / Edit customers inline
+const addCustomerBtn = document.getElementById('addCustomerBtn'), addCustomerInline = document.getElementById('addCustomerInline')
+addCustomerBtn.onclick = ()=> toggleAddCustomerInline()
+function toggleAddCustomerInline(preselectAccountId){
+  if(viewCust.style.display === 'none'){ setTab('customers'); setTimeout(()=> toggleAddCustomerInline(preselectAccountId), 140); return }
+  const container = addCustomerInline
+  if(container.style.display && container.style.display!=='none'){ container.style.display='none'; container.innerHTML=''; return }
+  container.innerHTML = `<div class="card">
+    <div style="font-weight:700">Add customer</div>
+    <label>Name</label><input id="ic_name" placeholder="Name" />
+    <label>Phone</label><input id="ic_phone" placeholder="Phone (optional)" />
+    <label>Profile</label><input id="ic_profile" placeholder="Profile" />
+    <div style="display:flex;gap:8px;margin-top:6px"><div style="flex:1"><label>Start</label><input id="ic_start" type="date" /></div><div style="flex:1"><label>Expiry</label><input id="ic_expiry" type="date" /></div></div>
+    <label><input id="ic_private" type="checkbox" /> Private profile</label>
+    <label>Assign to account</label>
+    <select id="ic_assign"><option value="">-- no account --</option>${state.accounts.map(a=>`<option value="${a.id}" ${preselectAccountId===a.id?'selected':''}>${esc(a.email)}</option>`).join('')}</select>
+    <label>Notes</label><textarea id="ic_notes"></textarea>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px"><button id="ic_cancel" class="secondary">Cancel</button><button id="ic_save" class="secondary">Save</button></div>
+  </div>`
+  container.style.display='block'
+  setTimeout(()=> document.getElementById('ic_name').focus(), 60)
+  document.getElementById('ic_cancel').onclick = ()=>{ container.style.display='none'; container.innerHTML='' }
+  document.getElementById('ic_save').onclick = ()=>{
+    const name=document.getElementById('ic_name').value.trim(); if(!name){ alert('Name required'); return }
+    const cust={ id:'c_'+uid(), name, phone:document.getElementById('ic_phone').value, profile:document.getElementById('ic_profile').value, startDate:document.getElementById('ic_start').value, expiryDate:document.getElementById('ic_expiry').value, private:document.getElementById('ic_private').checked, notes:document.getElementById('ic_notes').value, accountId:document.getElementById('ic_assign').value || null, accounts: [] }
+    state.customers.unshift(cust)
+    if(cust.accountId){ const acc=state.accounts.find(a=>a.id===cust.accountId); if(acc){ acc.customers = acc.customers || []; if(!acc.customers.includes(cust.id)) acc.customers.push(cust.id); cust.accounts=[cust.accountId] } }
+    saveState(state); container.style.display='none'; container.innerHTML=''; renderCustomers(); renderAll(); renderAccounts(); nowLog('Customer added '+name)
+  }
+}
+
+// render customers (with visible countdown & Bold header in copy)
+function renderCustomers(){
+  const q=(document.getElementById('globalSearch').value||'').toLowerCase()
+  let list = state.customers.slice()
+  const sort=document.getElementById('customerSort').value
+  if(sort==='expiry_asc') list.sort((a,b)=> ( (a.expiryDate?new Date(a.expiryDate).getTime():Infinity) - (b.expiryDate?new Date(b.expiryDate).getTime():Infinity) ))
+  if(sort==='expiry_desc') list.sort((a,b)=> ( (b.expiryDate?new Date(b.expiryDate).getTime():0) - (a.expiryDate?new Date(a.expiryDate).getTime():0) ))
+  if(sort==='name') list.sort((a,b)=> a.name.localeCompare(b.name))
+  const root=customersList; root.innerHTML=''
+  if(list.length===0){ root.innerHTML='<div class="muted-sm">No customers</div>'; document.getElementById('bulkBar').style.display='none'; return }
+  document.getElementById('bulkBar').style.display='flex'
+  list.forEach(c=>{
+    if(q && !((c.name||'').toLowerCase().includes(q) || (c.phone||'').toLowerCase().includes(q) || (c.profile||'').toLowerCase().includes(q))) return
+    const days = c.expiryDate ? daysLeft(c.expiryDate) : null
+    const div=document.createElement('div'); div.className='item'
+    const accEmail = c.accountId ? (state.accounts.find(a=>a.id===c.accountId)||{email:'—'}).email : '—'
+    const accountsCount = (c.accounts && c.accounts.length) ? c.accounts.length : ((c.accountId)?1:0)
+    // days label (emoji) reused
+    const daysLabel = days===null ? '' : (days<=0? '⚠️ ' : (days<=7? '⏳ ' : '✅ '))
+    // build HTML: name (private badge) • dd-mm-yyyy (with days emoji prefix)
+    const privateBadge = c.private ? '<span class="private-badge">P</span>' : ''
+    div.innerHTML = `<div class="left"><div class="avatar">${esc((c.name||'').slice(0,2).toUpperCase())}</div><div class="meta"><div style="font-weight:700">${esc(c.name)} ${privateBadge}</div><div class="muted-sm">${esc(accEmail)} • Profile: ${esc(c.profile||'—')} • Accounts: ${accountsCount}</div><div style="margin-top:8px"><span style="font-weight:700">${days===null?'': (days<=0? '⚠️ Expired' : (days<=7? '⏳ '+days+' days left' : '✅ '+days+' days left'))}</span> ${c.expiryDate?('<span style="margin-left:8px;font-weight:700">📅 '+fmtDate(c.expiryDate)+'</span>') : ''}</div><div class="muted-sm" style="margin-top:6px">Notes: ${esc(c.notes||'—')}</div><div class="cust-actions" id="cust_actions_${c.id}"></div></div></div>`
+    // append action buttons inside cust_actions container (so they appear below notes and horizontal)
+    const btnsContainer = document.createElement('div')
+    div.querySelector('.meta') // just to ensure DOM is ready
+    // create buttons
+    const cb=document.createElement('input'); cb.type='checkbox'; cb.className='custSelect'; cb.dataset.id=c.id; cb.style.marginBottom='8px'
+    const edit=document.createElement('button'); edit.className='small'; edit.textContent='Edit'; edit.onclick=()=> openCustomerEditInline(c.id)
+    const copyId=document.createElement('button'); copyId.className='small'; copyId.textContent='Copy Id'
+    copyId.onclick = async ()=>{
+      const acc = state.accounts.find(a=>a.id===c.accountId) || {email:'—', password:'—'}
+      const msg = `🍿 FluxFilm\nHi ${c.name || ''},\n\n📧 *Email:* ${acc.email}\n🔐 *Password:* ${acc.password || '—'}\n🗓 *Expiry:* ${c.expiryDate || '—'}\n\nThanks,\nFluxFilm`
+      const ok = await robustCopy(msg)
+      if(ok) toast('Copied message'); else alert('Copy failed')
+      nowLog('Copied message for '+(c.name||''))
+    }
+    const wa=document.createElement('button'); wa.className='small'; wa.textContent='WhatsApp'
+    wa.onclick = ()=>{ const acc = state.accounts.find(a=>a.id===c.accountId) || {email:'—', password:'—'}; const msg = `🍿 *FluxFilm*\nHi ${c.name || ''},\n\n📧 *Email:* ${acc.email}\n🔐 *Password:* ${acc.password || '—'}\n🗓 *Expiry:* ${c.expiryDate || '—'}`; if(confirm('Open WhatsApp to send message? (Cancel to copy)')) location.href = 'https://wa.me/?text=' + encodeURIComponent(msg); else robustCopy(msg).then(ok=> ok? toast('Copied message') : alert('Copy failed')) }
+    const remind=document.createElement('button'); remind.className='small'; remind.textContent='Remind'
+    remind.onclick = ()=>{ const acc = state.accounts.find(a=>a.id===c.accountId) || {email:'—'}; const msg = `🔔 *Reminder*\nHi ${c.name}, your subscription (${acc.email}) expires on *${c.expiryDate||'—'}*. Please renew.`; if(confirm('Open WhatsApp to send message? (Cancel to copy)')) location.href = 'https://wa.me/?text=' + encodeURIComponent(msg); else robustCopy(msg).then(ok=> ok? toast('Copied reminder') : alert('Copy failed')) }
+    const del=document.createElement('button'); del.className='danger'; del.textContent='Delete'; del.onclick=()=>{ if(confirm('Delete this customer?')){ lastDeleted={type:'customer',data:c,time:Date.now()}; state.customers=state.customers.filter(x=>x.id!==c.id); state.accounts.forEach(a=>{ if(a.customers) a.customers=a.customers.filter(cid=>cid!==c.id) }); saveState(state); renderCustomers(); renderAll(); renderAccounts(); showUndo() } }
+    // append into cust-actions container inside meta
+    const actionsHolder = div.querySelector(`#cust_actions_${c.id}`)
+    actionsHolder.appendChild(edit)
+    actionsHolder.appendChild(copyId)
+    actionsHolder.appendChild(wa)
+    actionsHolder.appendChild(remind)
+    actionsHolder.appendChild(del)
+    // also prep checkbox - put it before the actionsHolder (top-left inside right area previously). We keep checkbox visible: append it as first element inside actionsHolder but style wise it's tiny; user uses bulk select anyway
+    // For bulk selection, keep checkboxes in DOM for selection
+    // Add the checkbox outside actionsHolder (before buttons) to be selectable in UI
+    const parentMeta = div.querySelector('.meta')
+    const cbWrap = document.createElement('div'); cbWrap.style.marginTop='8px'; cbWrap.appendChild(cb); parentMeta.appendChild(cbWrap)
+
+    div.appendChild(document.createElement('div')) // keep DOM shape
+    root.appendChild(div)
+  })
+}
+
+// bulk actions
+document.getElementById('bulkRemindBtn').onclick = ()=>{ const checks = Array.from(document.querySelectorAll('.custSelect')).filter(x=>x.checked); if(checks.length===0){ alert('Select customers first'); return } const msgs = checks.map(cb=>{ const c = state.customers.find(x=>x.id===cb.dataset.id); const acc = state.accounts.find(a=>a.id===c.accountId) || {email:'—'}; return `Hi ${c.name}, your subscription (${acc.email}) expires on ${c.expiryDate||'—'}.` }); const combined = msgs.join('\n\n'); if(confirm('Open WhatsApp to send combined message? (Cancel to copy)')) location.href = 'https://wa.me/?text=' + encodeURIComponent(combined); else robustCopy(combined).then(ok=> ok? toast('Copied') : alert('Copy failed')) }
+document.getElementById('bulkCopyBtn').onclick = ()=>{ const checks = Array.from(document.querySelectorAll('.custSelect')).filter(x=>x.checked); if(checks.length===0){ alert('Select customers first'); return } const lines = checks.map(cb=>{ const c = state.customers.find(x=>x.id===cb.dataset.id); const acc = state.accounts.find(a=>a.id===c.accountId) || {email:'—', password:'—'}; return `🍿 FluxFilm\nHi ${c.name},\n\n📧 Email: ${acc.email}\n🔐 Password: ${acc.password}\n🗓 Expiry: ${c.expiryDate||'—'}` }); robustCopy(lines.join('\n\n')).then(ok=> ok? toast('Copied') : alert('Copy failed')) }
+document.getElementById('bulkSelectAll').onchange = (e)=>{ const ch = Array.from(document.querySelectorAll('.custSelect')); ch.forEach(cb=> cb.checked = e.target.checked) }
+
+// import/export/clear
+document.getElementById('fileImport').onchange = (e)=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=(ev)=>{ try{ const inc = JSON.parse(ev.target.result); state.platforms = inc.platforms && inc.platforms.length ? inc.platforms : state.platforms; state.accounts = [...(inc.accounts||[]), ...state.accounts]; state.customers = [...(inc.customers||[]), ...state.customers]; saveState(state); renderPlatforms(); renderAll(); renderAccounts(); renderCustomers(); toast('Imported JSON') }catch(err){ alert('Import failed') } }; r.readAsText(f) }
+document.getElementById('exportBtn').onclick = ()=>{ const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='fluxfilm_backup_v8_3.json'; a.click(); URL.revokeObjectURL(a.href); nowLog('Exported JSON'); toast('Exported JSON') }
+document.getElementById('exportCsvBtn').onclick = ()=>{ const rows=[['platform','email','password','startDate','expiryDate','notes','customers']]; state.accounts.forEach(a=>{ const p=(state.platforms.find(x=>x.id===a.platformId)||{name:''}).name; const custs=(a.customers||[]).map(x=> (state.customers.find(c=>c.id===x)||{name:'?' }).name).join('|'); rows.push([p,a.email,a.password||'',a.startDate||'',a.expiryDate||'',(a.notes||'').replace(/\n/g,' ').replace(/,/g,''),custs]) }); const csv = rows.map(r=> r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n'); const blob = new Blob([csv],{type:'text/csv'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='fluxfilm_accounts_v8_3.csv'; a.click(); URL.revokeObjectURL(a.href); toast('Exported CSV'); nowLog('Exported CSV') }
+document.getElementById('clearBtn').onclick = ()=>{ if(confirm('Clear all accounts and customers?')){ state.accounts=[]; state.customers=[]; saveState(state); renderAll(); renderPlatforms(); renderAccounts(); renderCustomers(); toast('Cleared data') } }
+
+// export customers CSV (requested)
+document.getElementById('exportCustomersBtn').onclick = ()=>{ const rows=[['customer_name','platform','expiry_date']]; state.customers.forEach(c=>{ const acc = state.accounts.find(a=>a.id===c.accountId); const platformName = acc ? (state.platforms.find(p=>p.id===acc.platformId)||{name:'Unknown'}).name : (c.accountId? 'Unknown' : '—'); rows.push([c.name, platformName, c.expiryDate ? fmtDate(c.expiryDate) : '' ]) }); const csv = rows.map(r=> r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n'); const blob = new Blob([csv],{type:'text/csv'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='fluxfilm_customers_v8_3.csv'; a.click(); URL.revokeObjectURL(a.href); toast('Exported customers CSV'); nowLog('Exported customers CSV') }
+
+// undo toast
+function showUndo(){ const root=document.getElementById('toastRoot'); root.innerHTML=''; const t=document.createElement('div'); t.className='toast'; t.innerHTML=`<div>Item deleted</div><div><button id="undoBtn" class="small secondary">Undo</button></div>`; root.appendChild(t); document.getElementById('undoBtn').onclick=()=>{ if(!lastDeleted) return; if(lastDeleted.type==='account') state.accounts.unshift(lastDeleted.data); if(lastDeleted.type==='customer') state.customers.unshift(lastDeleted.data); saveState(state); renderAll(); renderAccounts(); renderCustomers(); root.innerHTML=''; lastDeleted=null; nowLog('Undo performed') }; setTimeout(()=>{ try{ document.getElementById('toastRoot').innerHTML='' }catch(e){}; lastDeleted=null },7000) }
+
+// edit customer inline
+function openCustomerEditInline(id){
+  const c = state.customers.find(x=>x.id===id); if(!c) return
+  const container = document.getElementById('addCustomerInline')
+  container.innerHTML = `<div class="card">
+    <div style="font-weight:700">Edit customer</div>
+    <label>Name</label><input id="ic_name_e" value="${esc(c.name)}" />
+    <label>Phone</label><input id="ic_phone_e" value="${esc(c.phone||'')}" />
+    <label>Profile</label><input id="ic_profile_e" value="${esc(c.profile||'')}" />
+    <div style="display:flex;gap:8px;margin-top:6px"><div style="flex:1"><label>Start</label><input id="ic_start_e" type="date" value="${c.startDate||''}" /></div><div style="flex:1"><label>Expiry</label><input id="ic_expiry_e" type="date" value="${c.expiryDate||''}" /></div></div>
+    <label><input id="ic_private_e" type="checkbox" ${c.private? 'checked':''} /> Private profile</label>
+    <label>Assign to account</label>
+    <select id="ic_assign_e"><option value="">-- no account --</option>${state.accounts.map(a=>`<option value="${a.id}" ${c.accountId===a.id?'selected':''}>${esc(a.email)}</option>`).join('')}</select>
+    <label>Notes</label><textarea id="ic_notes_e">${esc(c.notes||'')}</textarea>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px"><button id="ic_cancel_e" class="secondary">Cancel</button><button id="ic_save_e" class="secondary">Save</button></div>
+  </div>`
+  container.style.display='block'; setTimeout(()=>document.getElementById('ic_name_e').focus(),30)
+  document.getElementById('ic_cancel_e').onclick = ()=>{ container.style.display='none'; container.innerHTML='' }
+  document.getElementById('ic_save_e').onclick = ()=>{
+    c.name = document.getElementById('ic_name_e').value.trim() || c.name
+    c.phone = document.getElementById('ic_phone_e').value
+    c.profile = document.getElementById('ic_profile_e').value
+    c.startDate = document.getElementById('ic_start_e').value
+    c.expiryDate = document.getElementById('ic_expiry_e').value
+    c.private = document.getElementById('ic_private_e').checked
+    c.accountId = document.getElementById('ic_assign_e').value || null
+    c.notes = document.getElementById('ic_notes_e').value
+    state.accounts.forEach(a=>{ a.customers = a.customers || []; if(c.accountId && !a.customers.includes(c.id) && a.id===c.accountId) a.customers.push(c.id); if(a.customers.includes(c.id) && a.id!==c.accountId) a.customers = a.customers.filter(cid=>cid!==c.id) })
+    saveState(state); container.style.display='none'; container.innerHTML=''; renderCustomers(); renderAll(); renderAccounts(); nowLog('Edited customer '+c.name)
+  }
+}
+
+// search wiring
+document.getElementById('globalSearch').addEventListener('input', ()=>{ renderAll(); renderCustomers() })
+document.getElementById('accountSearch').addEventListener('input', renderAccounts)
+document.getElementById('customerSort').addEventListener('change', renderCustomers)
+document.getElementById('allFilter').addEventListener('change', renderAll)
+document.getElementById('allSort').addEventListener('change', renderAll)
+document.getElementById('maskToggle').addEventListener('change', renderAll)
+
+// Business overview
+function renderBusiness(){
+  // counts per platform (customers assigned to accounts on platform)
+  const counts = {}
+  state.platforms.forEach(p=> counts[p.name]=0)
+  state.customers.forEach(c=>{
+    if(c.accountId){
+      const acc = state.accounts.find(a=>a.id===c.accountId)
+      if(acc){ const pname = (state.platforms.find(p=>p.id===acc.platformId)||{name:'Other'}).name; counts[pname] = (counts[pname]||0)+1 }
+    }
+  })
+  const totalCustomers = state.customers.length
+  const soldCount = Object.values(counts).reduce((s,v)=>s+v,0)
+  const statsEl = document.getElementById('businessStats')
+  statsEl.innerHTML = `<div>Total customers: <strong>${totalCustomers}</strong> · Customers assigned to accounts: <strong>${soldCount}</strong></div><div style="margin-top:6px">${Object.keys(counts).map(k=>`${esc(k)}: <strong>${counts[k]}</strong>`).join(' · ')}</div>`
+
+  // platform chart
+  const labels = Object.keys(counts)
+  const data = labels.map(l=>counts[l]||0)
+  drawBarChart('platformChart', labels, data, 'Customers')
+
+  // monthly customers (based on customer.createdAt fallback to account.createdAt)
+  const months = getLastNMonths(6)
+  const monthCounts = months.map(m=>{
+    return state.customers.reduce((sum,c)=>{
+      const ts = c.createdAt || (c.accountId? (state.accounts.find(a=>a.id===c.accountId)||{}).createdAt : null)
+      if(!ts) return sum
+      const d=new Date(ts); const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`
+      return key===m ? sum+1 : sum
+    },0)
+  })
+  const monthLabels = months.map(m=>{ const [y,mo]=m.split('-'); const d=new Date(y,parseInt(mo,10)-1); return d.toLocaleString(undefined,{month:'short',year:'2-digit'}) })
+  drawBarChart('monthlyChart', monthLabels, monthCounts, 'New customers')
+}
+
+
+function parseMonthInputToRange(monthStr){ if(!monthStr) return null; const [y,mo] = monthStr.split('-'); const start = new Date(Number(y), Number(mo)-1, 1); const end = new Date(Number(y), Number(mo), 0); return {start, end} }
+
+document.addEventListener('click', function(){ /* ensure elements exist */ setTimeout(()=>{},0) })
+
+document.getElementById('bizWeek')?.addEventListener('click', ()=>{ const now=new Date(); const start=new Date(now); start.setDate(now.getDate()-7); const end=new Date(now); applyBusinessRange(start,end) })
+document.getElementById('bizMonth')?.addEventListener('click', ()=>{ const now=new Date(); const start=new Date(now.getFullYear(), now.getMonth(), 1); const end=new Date(now.getFullYear(), now.getMonth()+1,0); applyBusinessRange(start,end) })
+document.getElementById('bizLastMonth')?.addEventListener('click', ()=>{ const now=new Date(); const start=new Date(now.getFullYear(), now.getMonth()-1, 1); const end=new Date(now.getFullYear(), now.getMonth(), 0); applyBusinessRange(start,end) })
+document.getElementById('bizShow')?.addEventListener('click', ()=>{ const f=document.getElementById('bizFrom').value; const t=document.getElementById('bizTo').value; if(!f||!t){ alert('Select From and To'); return } const r1=parseMonthInputToRange(f); const r2=parseMonthInputToRange(t); applyBusinessRange(r1.start, r2.end) })
+
+function applyBusinessRange(startDate, endDate){ const countsRange={}; state.platforms.forEach(p=> countsRange[p.name]=0); state.customers.forEach(c=>{ const created = c.createdAt ? new Date(c.createdAt) : (c.startDate? new Date(c.startDate) : null); if(!created) return; if(created >= startDate && created <= endDate){ if(c.accountId){ const acc = state.accounts.find(a=>a.id===c.accountId); const pname = (state.platforms.find(p=>p.id===acc.platformId)||{name:'Other'}).name; countsRange[pname] = (countsRange[pname]||0)+1 } } }); const labels = Object.keys(countsRange); const data = labels.map(l=>countsRange[l]||0); drawBarChart('platformChart', labels, data, 'Customers'); const total = Object.values(countsRange).reduce((s,v)=>s+v,0); document.getElementById('businessStats').innerHTML = `<div>Customers in range: <strong>${total}</strong></div><div style="margin-top:6px">${Object.keys(countsRange).map(k=>`${esc(k)}: <strong>${countsRange[k]}</strong>`).join(' · ')}</div>` }
+
+
+function getLastNMonths(n){ const arr=[]; const now=new Date(); now.setDate(1); for(let i=n-1;i>=0;i--){ const d=new Date(now.getFullYear(), now.getMonth()-i,1); arr.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`) } return arr }
+
+// simple canvas bar chart (improved spacing & label wrapping)
+function drawBarChart(canvasId, labels, data, ylabel){
+  const c=document.getElementById(canvasId); if(!c) return
+  const DPR = window.devicePixelRatio || 1
+  const cw = c.clientWidth
+  const ch = 220
+  c.width = cw * DPR; c.height = ch * DPR
+  const ctx = c.getContext('2d'); ctx.scale(DPR,DPR)
+  ctx.clearRect(0,0,cw,ch)
+  const paddingLeft = 36, paddingRight = 12, paddingTop = 18, paddingBottom = 36
+  const chartW = cw - paddingLeft - paddingRight, chartH = ch - paddingTop - paddingBottom
+  const max = Math.max(1, ...data)
+  const barSpace = chartW / Math.max(1, labels.length)
+  const barW = Math.max(12, barSpace * 0.5)
+  ctx.font='12px system-ui'; ctx.fillStyle='#475569'; ctx.textAlign='center'
+  data.forEach((v,i)=>{
+    const x = paddingLeft + i*barSpace + (barSpace - barW)/2
+    const hBar = (v / max) * chartH
+    const y = paddingTop + (chartH - hBar)
+    // bar
+    ctx.fillStyle = '#60a5fa'
+    ctx.fillRect(x, y, barW, hBar)
+    // value above bar
+    ctx.fillStyle = '#0f172a'; ctx.font='12px system-ui'; ctx.textAlign='center'
+    ctx.fillText(String(v), x + barW/2, y - 6)
+    // label below (wrap if long)
+    ctx.fillStyle = '#475569'; ctx.font='11px system-ui'; ctx.textAlign='center'
+    const labelX = x + barW/2
+    const labelY = ch - 12
+    const lab = labels[i]
+    ctx.fillText(lab, labelX, labelY)
+  })
+  // y axis label (left)
+  ctx.save(); ctx.translate(12, ch/2); ctx.rotate(-Math.PI/2); ctx.fillStyle='#475569'; ctx.font='12px system-ui'; ctx.textAlign='center'; ctx.fillText(ylabel,0,0); ctx.restore()
+}
+
+// initial rendering
+renderPlatforms(); renderAll(); renderAccounts(); renderCustomers(); nowLog('initialized v8.3 (layout fixes)')
+
+</script>
+
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').then(()=>console.log('SW registered')).catch(e=>console.warn(e));
+}
+</script>
+
+</body>
+</html>
