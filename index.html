@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#ffffff">
-<title>FluxFilm — v8.3 (layout fixes) — dates+platform-image</title>
+<title>FluxFilm — v8.4 (quick delete + copy fixes) — dates+platform-image</title>
 <style>
   :root{--bg:#f7fafc;--card:#fff;--muted:#6b7280;--accent:#2563eb;--danger:#ef4444}
   body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;background:var(--bg);margin:0;color:#0f172a}
@@ -62,7 +62,7 @@
 <div class="wrap">
   <header>
     <h1>🍿 FluxFilm</h1>
-    <div class="muted">v8.3 — layout fixes</div>
+    <div class="muted">v8.4 — quick delete + copy fixes</div>
     <div style="width:100%"><input id="globalSearch" placeholder="Universal search — email, customer, profile..." /></div>
     <div class="menu" style="margin-top:10px">
       <div id="tabAll" class="tab active">All</div>
@@ -174,19 +174,21 @@
   </div>
 
   <div class="card" style="margin-top:12px"><div class="muted-sm">Tip: Export to back up.</div></div>
-  <div class="card" style="margin-top:12px"><div class="muted-sm">Debug:</div><pre id="log">loaded v8.3 (layout fix)</pre></div>
+  <div class="card" style="margin-top:12px"><div class="muted-sm">Debug:</div><pre id="log">loaded v8.4 (quick delete + copy fixes)</pre></div>
 </div>
 
 <div id="toastRoot"></div>
 
 <script>
-/* FluxFilm v8.3 layout fixes
+/* FluxFilm v8.4 quick delete + copy fixes
    - dates shown DD-MMM-YYYY (e.g. 12-Sep-2025)
    - add platform image URL input when creating a platform
    - platform avatars render image if provided
+   - NEW: quick-delete customer from Accounts view
+   - FIX: copy templates use FluxFilm header + bold labels consistently
 */
 
-const KEY='fluxfilm_v8_3_fix'
+const KEY='fluxfilm_v8_4_fix'
 
 // small util and logging
 function nowLog(s){ const p=document.getElementById('log'); p.textContent = new Date().toISOString().slice(11,19) + ' - ' + s + '\n' + p.textContent }
@@ -338,7 +340,7 @@ document.getElementById('addAccountBtn2').onclick = ()=> openAccountInline(docum
 
 function badgeHtmlForDays(days){
   if(days===null) return '<span class="badge" style="background:#eef2ff;color:#1e3a8a">• No expiry</span>'
-  if(days<=0) return '<span class="badge red"⚠️ Expired</span>'
+  if(days<=0) return '<span class="badge red">⚠️ Expired</span>'
   if(days<=7) return '<span class="badge orange">⏳ '+days+'d</span>'
   return '<span class="badge green">✅ '+days+'d</span>'
 }
@@ -416,7 +418,8 @@ function renderAll(){
     const right=document.createElement('div'); right.className='actions'
     const editBtn=document.createElement('button'); editBtn.className='small'; editBtn.textContent='Edit'; editBtn.onclick=()=> openAccountInline(document.getElementById('addAccountInline'), a.id)
     const copyBtn=document.createElement('button'); copyBtn.className='small'; copyBtn.textContent='Copy'; copyBtn.onclick=async ()=>{
-      const text = `🍿 FluxFilm\nHi, here are your account details:\n\n📧 Email: ${a.email}\n🔐 Password: ${a.password||''}\n🗓 Expiry: ${a.expiryDate||''}`
+      const firstCust = (a.customers && a.customers.length>0) ? (state.customers.find(c=>c.id===a.customers[0])||{name:''}).name : ''
+      const text = `🍿 *FluxFilm*\nHi ${firstCust||''},\n\n📧 *Email:* ${a.email}\n🔐 *Password:* ${a.password||'—'}\n🗓️ *Expiry:* ${a.expiryDate||'—'}`
       const ok = await robustCopy(text); if(ok){ toast('Copied credentials to clipboard'); nowLog('Copied creds for '+a.email) } else alert('Copy failed — select & copy manually')
     }
     const waBtn=document.createElement('button'); waBtn.className='small'; waBtn.textContent='WhatsApp'
@@ -446,17 +449,19 @@ function renderAccounts(){
       const cDays = c.expiryDate ? daysLeft(c.expiryDate) : null
       const dayLabel = cDays===null ? '' : (cDays<=0 ? '⚠️ ' : (cDays<=7 ? '⏳ ' : '✅ '))
       const privateBadge = c.private ? '<span class="private-badge">P</span>' : ''
-      return `<div style="margin-top:6px"><b>${esc(c.name)}</b> ${privateBadge} • ${dayLabel}${c.expiryDate? fmtDate(c.expiryDate) : '—'}</div>`
+      return `<div style="margin-top:6px"><b>${esc(c.name)}</b> ${privateBadge} • ${dayLabel}${c.expiryDate? fmtDate(c.expiryDate) : '—'}
+        <button class=\"small danger\" style=\"margin-left:8px\" onclick=\"quickDeleteCustomer('${c.id}')\">Delete</button>
+      </div>`
     }).join('') : '<div class="muted-sm">No customers yet</div>'
     const avatarHtml = p.imageUrl ? `<div class="avatar"><img src="${esc(p.imageUrl)}" alt="${esc(p.name)}" onerror="this.parentNode.innerHTML='${esc(p.name.slice(0,2).toUpperCase())}'"/></div>` : `<div class="avatar">${esc(p.name.slice(0,2).toUpperCase())}</div>`
     d.innerHTML = `${avatarHtml}<div class="meta"><div style="font-weight:700">${esc(a.email)} ${a.expiryDate?'<span style="margin-left:8px;font-weight:700">📅 '+fmtDate(a.expiryDate)+'</span>':''}</div><div class="muted-sm">Start: ${a.startDate?fmtDate(a.startDate):'—'} • Expiry: ${a.expiryDate?fmtDate(a.expiryDate):'—'}</div><div style="margin-top:8px">${badgeHtmlForDays(days)} <strong style="margin-left:8px">${days===null? '' : (days<=0? 'Expired' : days+' days left')}</strong></div><div style="margin-top:8px" class="muted-sm">Customers assigned:</div>${custHtml}<div class="muted-sm" style="margin-top:8px">Notes: ${esc(a.notes||'—')}</div><div class="acct-actions" id="acct_actions_${a.id}"></div></div>`
     const actionsContainer = d.querySelector(`#acct_actions_${a.id}`)
     const edit=document.createElement('button'); edit.className='small'; edit.textContent='Edit'; edit.onclick=()=> openAccountInline(document.getElementById('addAccountInlineAccounts'), a.id)
     const addCust=document.createElement('button'); addCust.className='small'; addCust.textContent='Add customer'; addCust.onclick=()=> toggleAddCustomerInline(a.id)
-    const copy=document.createElement('button'); copy.className='small'; copy.textContent='Copy'; copy.onclick=async ()=>{ const text=`🍿 FluxFilm\nHi, here are your account details:\n\n📧 Email: ${a.email}\n🔐 Password: ${a.password||''}\n🗓 Expiry: ${a.expiryDate||''}`; const ok=await robustCopy(text); if(ok) toast('Copied credentials'); else alert('Copy failed') }
-    const wa=document.createElement('button'); wa.className='small'; wa.textContent='WhatsApp'; wa.onclick=()=>{ const firstCust=(a.customers && a.customers.length>0)? (state.customers.find(c=>c.id===a.customers[0])||{name:''}).name : ''; const msg=`🍿 *FluxFilm*\nHi ${firstCust||''},\n\n📧 *Email:* ${a.email}\n🔐 *Password:* ${a.password||'—'}\n🗓️ *Expiry:* ${a.expiryDate||'—'}\n\nEnjoy!`; if(confirm('Open WhatsApp to send message? (Cancel to copy)')) location.href='https://wa.me/?text='+encodeURIComponent(msg); else robustCopy(msg).then(ok=> ok? toast('Message copied') : alert('Copy failed')) }
-    const remind=document.createElement('button'); remind.className='small'; remind.textContent='Remind'; remind.onclick=()=>{ const msg=`🔔 *Reminder*\nHi ${(a.customers&&a.customers.length)? (state.customers.find(c=>c.id===a.customers[0])||{name:''}).name : ''},\n\nYour subscription (${a.email}) expires on *${a.expiryDate||'—'}*. Please renew.\n\nThanks,\nFluxFilm`; if(confirm('Open WhatsApp to send reminder? (Cancel to copy)')) location.href='https://wa.me/?text='+encodeURIComponent(msg); else robustCopy(msg).then(ok=> ok? toast('Reminder copied') : alert('Copy failed')) }
-    const del=document.createElement('button'); del.className='danger'; del.textContent='Delete'; del.onclick=()=>{ if(confirm('Delete account?')){ lastDeleted={type:'account',data:a,time:Date.now()}; state.accounts=state.accounts.filter(x=>x.id!==a.id); state.customers.forEach(c=>{ if(c.accounts) c.accounts=c.accounts.filter(cid=>cid!==a.id) }); saveState(state); renderAccounts(); renderCustomers(); renderAll(); showUndo() } }
+    const copy=document.createElement('button'); copy.className='small'; copy.textContent='Copy'; copy.onclick=async ()=>{ const text=`🍿 *FluxFilm*\nHi ${(customersForAcc[0]?.name)||''},\n\n📧 *Email:* ${a.email}\n🔐 *Password:* ${a.password||'—'}\n🗓️ *Expiry:* ${a.expiryDate||'—'}`; const ok=await robustCopy(text); if(ok) toast('Copied credentials'); else alert('Copy failed') }
+    const wa=document.createElement('button'); wa.className='small'; wa.textContent='WhatsApp'; wa.onclick=()=>{ const msg=`🍿 *FluxFilm*\nHi ${(customersForAcc[0]?.name)||''},\n\n📧 *Email:* ${a.email}\n🔐 *Password:* ${a.password||'—'}\n🗓️ *Expiry:* ${a.expiryDate||'—'}\n\nEnjoy!`; if(confirm('Open WhatsApp to send message? (Cancel to copy)')) location.href='https://wa.me/?text='+encodeURIComponent(msg); else robustCopy(msg).then(ok=> ok? toast('Message copied') : alert('Copy failed')) }
+    const remind=document.createElement('button'); remind.className='small'; remind.textContent='Remind'; remind.onclick=()=>{ const msg=`🔔 *Reminder*\nHi ${(customersForAcc[0]?.name)||''},\n\nYour subscription (${a.email}) expires on *${a.expiryDate||'—'}*. Please renew.\n\nThanks,\nFluxFilm`; if(confirm('Open WhatsApp to send reminder? (Cancel to copy)')) location.href='https://wa.me/?text='+encodeURIComponent(msg); else robustCopy(msg).then(ok=> ok? toast('Reminder copied') : alert('Copy failed')) }
+    const del=document.createElement('button'); del.className='danger'; del.textContent='Delete'; del.onclick=()=>{ if(confirm('Delete account?')){ lastDeleted={type:'account',data:a,time:Date.now()}; state.accounts=state.accounts.filter(x=>x.id!==a.id); state.customers.forEach(c=>{ if(a.customers?.includes(c.id)) c.accountId=null; }); saveState(state); renderAccounts(); renderCustomers(); renderAll(); showUndo() } }
     actionsContainer.appendChild(edit)
     actionsContainer.appendChild(addCust)
     actionsContainer.appendChild(copy)
@@ -467,6 +472,19 @@ function renderAccounts(){
     sect.appendChild(d)
   })
   platformAccounts.appendChild(sect)
+}
+
+// QUICK DELETE customer from Accounts view
+function quickDeleteCustomer(id){
+  const c = state.customers.find(x=>x.id===id)
+  if(!c) return
+  if(!confirm(`Delete customer "${c.name}" permanently?`)) return
+  lastDeleted = {type:'customer', data: c, time: Date.now()}
+  state.customers = state.customers.filter(x=>x.id!==id)
+  state.accounts.forEach(a=>{ if(a.customers) a.customers = a.customers.filter(cid=>cid!==id) })
+  saveState(state)
+  renderAccounts(); renderCustomers(); renderAll();
+  showUndo();
 }
 
 // Add / Edit customers inline
@@ -493,7 +511,7 @@ function toggleAddCustomerInline(preselectAccountId){
   document.getElementById('ic_cancel').onclick = ()=>{ container.style.display='none'; container.innerHTML='' }
   document.getElementById('ic_save').onclick = ()=>{
     const name=document.getElementById('ic_name').value.trim(); if(!name){ alert('Name required'); return }
-    const cust={ id:'c_'+uid(), name, phone:document.getElementById('ic_phone').value, profile:document.getElementById('ic_profile').value, startDate:document.getElementById('ic_start').value, expiryDate:document.getElementById('ic_expiry').value, private:document.getElementById('ic_private').checked, notes:document.getElementById('ic_notes').value, accountId:document.getElementById('ic_assign').value || null, accounts: [] }
+    const cust={ id:'c_'+uid(), name, phone:document.getElementById('ic_phone').value, profile:document.getElementById('ic_profile').value, startDate:document.getElementById('ic_start').value, expiryDate:document.getElementById('ic_expiry').value, private:document.getElementById('ic_private').checked, notes:document.getElementById('ic_notes').value, accountId:document.getElementById('ic_assign').value || null, accounts: [], createdAt: Date.now() }
     state.customers.unshift(cust)
     if(cust.accountId){ const acc=state.accounts.find(a=>a.id===cust.accountId); if(acc){ acc.customers = acc.customers || []; if(!acc.customers.includes(cust.id)) acc.customers.push(cust.id); cust.accounts=[cust.accountId] } }
     saveState(state); container.style.display='none'; container.innerHTML=''; renderCustomers(); renderAll(); renderAccounts(); nowLog('Customer added '+name)
@@ -517,7 +535,6 @@ function renderCustomers(){
     const div=document.createElement('div'); div.className='item'
     const accEmail = c.accountId ? (state.accounts.find(a=>a.id===c.accountId)||{email:'—'}).email : '—'
     const accountsCount = (c.accounts && c.accounts.length) ? c.accounts.length : ((c.accountId)?1:0)
-    const daysLabel = days===null ? '' : (days<=0? '⚠️ ' : (days<=7? '⏳ ' : '✅ '))
     const privateBadge = c.private ? '<span class="private-badge">P</span>' : ''
     div.innerHTML = `<div class="left"><div class="avatar">${esc((c.name||'').slice(0,2).toUpperCase())}</div><div class="meta"><div style="font-weight:700">${esc(c.name)} ${privateBadge}</div><div class="muted-sm">${esc(accEmail)} • Profile: ${esc(c.profile||'—')} • Accounts: ${accountsCount}</div><div style="margin-top:8px"><span style="font-weight:700">${days===null?'': (days<=0? '⚠️ Expired' : (days<=7? '⏳ '+days+' days left' : '✅ '+days+' days left'))}</span> ${c.expiryDate?('<span style="margin-left:8px;font-weight:700">📅 '+fmtDate(c.expiryDate)+'</span>') : ''}</div><div class="muted-sm" style="margin-top:6px">Notes: ${esc(c.notes||'—')}</div><div class="cust-actions" id="cust_actions_${c.id}"></div></div></div>`
     const btnsContainer = document.createElement('div')
@@ -527,7 +544,7 @@ function renderCustomers(){
     const copyId=document.createElement('button'); copyId.className='small'; copyId.textContent='Copy Id'
     copyId.onclick = async ()=>{
       const acc = state.accounts.find(a=>a.id===c.accountId) || {email:'—', password:'—'}
-      const msg = `🍿 FluxFilm\nHi ${c.name || ''},\n\n📧 *Email:* ${acc.email}\n🔐 *Password:* ${acc.password || '—'}\n🗓 *Expiry:* ${c.expiryDate || '—'}\n\nThanks,\nFluxFilm`
+      const msg = `🍿 *FluxFilm*\nHi ${c.name || ''},\n\n📧 *Email:* ${acc.email}\n🔐 *Password:* ${acc.password || '—'}\n🗓 *Expiry:* ${c.expiryDate || '—'}\n\nThanks,\nFluxFilm`
       const ok = await robustCopy(msg)
       if(ok) toast('Copied message'); else alert('Copy failed')
       nowLog('Copied message for '+(c.name||''))
@@ -553,17 +570,17 @@ function renderCustomers(){
 
 // bulk actions
 document.getElementById('bulkRemindBtn').onclick = ()=>{ const checks = Array.from(document.querySelectorAll('.custSelect')).filter(x=>x.checked); if(checks.length===0){ alert('Select customers first'); return } const msgs = checks.map(cb=>{ const c = state.customers.find(x=>x.id===cb.dataset.id); const acc = state.accounts.find(a=>a.id===c.accountId) || {email:'—'}; return `Hi ${c.name}, your subscription (${acc.email}) expires on ${c.expiryDate||'—'}.` }); const combined = msgs.join('\n\n'); if(confirm('Open WhatsApp to send combined message? (Cancel to copy)')) location.href = 'https://wa.me/?text=' + encodeURIComponent(combined); else robustCopy(combined).then(ok=> ok? toast('Copied') : alert('Copy failed')) }
-document.getElementById('bulkCopyBtn').onclick = ()=>{ const checks = Array.from(document.querySelectorAll('.custSelect')).filter(x=>x.checked); if(checks.length===0){ alert('Select customers first'); return } const lines = checks.map(cb=>{ const c = state.customers.find(x=>x.id===cb.dataset.id); const acc = state.accounts.find(a=>a.id===c.accountId) || {email:'—', password:'—'}; return `🍿 FluxFilm\nHi ${c.name},\n\n📧 Email: ${acc.email}\n🔐 Password: ${acc.password}\n🗓 Expiry: ${c.expiryDate||'—'}` }); robustCopy(lines.join('\n\n')).then(ok=> ok? toast('Copied') : alert('Copy failed')) }
+document.getElementById('bulkCopyBtn').onclick = ()=>{ const checks = Array.from(document.querySelectorAll('.custSelect')).filter(x=>x.checked); if(checks.length===0){ alert('Select customers first'); return } const lines = checks.map(cb=>{ const c = state.customers.find(x=>x.id===cb.dataset.id); const acc = state.accounts.find(a=>a.id===c.accountId) || {email:'—', password:'—'}; return `🍿 *FluxFilm*\nHi ${c.name},\n\n📧 *Email:* ${acc.email}\n🔐 *Password:* ${acc.password}\n🗓 *Expiry:* ${c.expiryDate||'—'}` }); robustCopy(lines.join('\n\n')).then(ok=> ok? toast('Copied') : alert('Copy failed')) }
 document.getElementById('bulkSelectAll').onchange = (e)=>{ const ch = Array.from(document.querySelectorAll('.custSelect')); ch.forEach(cb=> cb.checked = e.target.checked) }
 
 // import/export/clear
 document.getElementById('fileImport').onchange = (e)=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=(ev)=>{ try{ const inc = JSON.parse(ev.target.result); state.platforms = inc.platforms && inc.platforms.length ? inc.platforms : state.platforms; state.accounts = [...(inc.accounts||[]), ...state.accounts]; state.customers = [...(inc.customers||[]), ...state.customers]; saveState(state); renderPlatforms(); renderAll(); renderAccounts(); renderCustomers(); toast('Imported JSON') }catch(err){ alert('Import failed') } }; r.readAsText(f) }
-document.getElementById('exportBtn').onclick = ()=>{ const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='fluxfilm_backup_v8_3.json'; a.click(); URL.revokeObjectURL(a.href); nowLog('Exported JSON'); toast('Exported JSON') }
-document.getElementById('exportCsvBtn').onclick = ()=>{ const rows=[['platform','email','password','startDate','expiryDate','notes','customers']]; state.accounts.forEach(a=>{ const p=(state.platforms.find(x=>x.id===a.platformId)||{name:''}).name; const custs=(a.customers||[]).map(x=> (state.customers.find(c=>c.id===x)||{name:'?' }).name).join('|'); rows.push([p,a.email,a.password||'',a.startDate||'',a.expiryDate||'',(a.notes||'').replace(/\n/g,' ').replace(/,/g,''),custs]) }); const csv = rows.map(r=> r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n'); const blob = new Blob([csv],{type:'text/csv'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='fluxfilm_accounts_v8_3.csv'; a.click(); URL.revokeObjectURL(a.href); toast('Exported CSV'); nowLog('Exported CSV') }
+document.getElementById('exportBtn').onclick = ()=>{ const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='fluxfilm_backup_v8_4.json'; a.click(); URL.revokeObjectURL(a.href); nowLog('Exported JSON'); toast('Exported JSON') }
+document.getElementById('exportCsvBtn').onclick = ()=>{ const rows=[["platform","email","password","startDate","expiryDate","notes","customers"]]; state.accounts.forEach(a=>{ const p=(state.platforms.find(x=>x.id===a.platformId)||{name:''}).name; const custs=(a.customers||[]).map(x=> (state.customers.find(c=>c.id===x)||{name:'?' }).name).join('|'); rows.push([p,a.email,a.password||'',a.startDate||'',a.expiryDate||'',(a.notes||'').replace(/\n/g,' ').replace(/,/g,''),custs]) }); const csv = rows.map(r=> r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n'); const blob = new Blob([csv],{type:'text/csv'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='fluxfilm_accounts_v8_4.csv'; a.click(); URL.revokeObjectURL(a.href); toast('Exported CSV'); nowLog('Exported CSV') }
 document.getElementById('clearBtn').onclick = ()=>{ if(confirm('Clear all accounts and customers?')){ state.accounts=[]; state.customers=[]; saveState(state); renderAll(); renderPlatforms(); renderAccounts(); renderCustomers(); toast('Cleared data') } }
 
 // export customers CSV (requested)
-document.getElementById('exportCustomersBtn').onclick = ()=>{ const rows=[['customer_name','platform','expiry_date']]; state.customers.forEach(c=>{ const acc = state.accounts.find(a=>a.id===c.accountId); const platformName = acc ? (state.platforms.find(p=>p.id===acc.platformId)||{name:'Unknown'}).name : (c.accountId? 'Unknown' : '—'); rows.push([c.name, platformName, c.expiryDate ? fmtDate(c.expiryDate) : '' ]) }); const csv = rows.map(r=> r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n'); const blob = new Blob([csv],{type:'text/csv'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='fluxfilm_customers_v8_3.csv'; a.click(); URL.revokeObjectURL(a.href); toast('Exported customers CSV'); nowLog('Exported customers CSV') }
+document.getElementById('exportCustomersBtn').onclick = ()=>{ const rows=[["customer_name","platform","expiry_date"]]; state.customers.forEach(c=>{ const acc = state.accounts.find(a=>a.id===c.accountId); const platformName = acc ? (state.platforms.find(p=>p.id===acc.platformId)||{name:'Unknown'}).name : (c.accountId? 'Unknown' : '—'); rows.push([c.name, platformName, c.expiryDate ? fmtDate(c.expiryDate) : '' ]) }); const csv = rows.map(r=> r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n'); const blob = new Blob([csv],{type:'text/csv'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='fluxfilm_customers_v8_4.csv'; a.click(); URL.revokeObjectURL(a.href); toast('Exported customers CSV'); nowLog('Exported customers CSV') }
 
 // undo toast
 function showUndo(){ const root=document.getElementById('toastRoot'); root.innerHTML=''; const t=document.createElement('div'); t.className='toast'; t.innerHTML=`<div>Item deleted</div><div><button id="undoBtn" class="small secondary">Undo</button></div>`; root.appendChild(t); document.getElementById('undoBtn').onclick=()=>{ if(!lastDeleted) return; if(lastDeleted.type==='account') state.accounts.unshift(lastDeleted.data); if(lastDeleted.type==='customer') state.customers.unshift(lastDeleted.data); saveState(state); renderAll(); renderAccounts(); renderCustomers(); root.innerHTML=''; lastDeleted=null; nowLog('Undo performed') }; setTimeout(()=>{ try{ document.getElementById('toastRoot').innerHTML='' }catch(e){}; lastDeleted=null },7000) }
@@ -686,7 +703,7 @@ function drawBarChart(canvasId, labels, data, ylabel){
 }
 
 // initial rendering
-renderPlatforms(); renderAll(); renderAccounts(); renderCustomers(); nowLog('initialized v8.3 (layout fixes)')
+renderPlatforms(); renderAll(); renderAccounts(); renderCustomers(); nowLog('initialized v8.4 (quick delete + copy fixes)')
 
 </script>
 </body>
