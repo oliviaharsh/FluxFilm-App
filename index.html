@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#ffffff">
-<title>FluxFilm — v8.4 (quick delete + copy fixes) — dates+platform-image</title>
+<title>FluxFilm — v8.5 (platform in messages + assign dropdown + scroll-to-new)</title>
 <style>
   :root{--bg:#f7fafc;--card:#fff;--muted:#6b7280;--accent:#2563eb;--danger:#ef4444}
   body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;background:var(--bg);margin:0;color:#0f172a}
@@ -62,7 +62,7 @@
 <div class="wrap">
   <header>
     <h1>🍿 FluxFilm</h1>
-    <div class="muted">v8.4 — quick delete + copy fixes</div>
+    <div class="muted">v8.5 — platform in messages + assign dropdown + scroll-to-new</div>
     <div style="width:100%"><input id="globalSearch" placeholder="Universal search — email, customer, profile..." /></div>
     <div class="menu" style="margin-top:10px">
       <div id="tabAll" class="tab active">All</div>
@@ -155,7 +155,6 @@
             <button id="bizShow" class="small secondary">Show</button>
           </div>
         </div>
-        <!-- CHARTS: stacked on small screens, side-by-side on wide screens -->
         <div class="chartRow" style="margin-top:12px">
           <div class="chartCard">
             <div style="font-weight:700;margin-bottom:6px">Customers by platform</div>
@@ -174,21 +173,23 @@
   </div>
 
   <div class="card" style="margin-top:12px"><div class="muted-sm">Tip: Export to back up.</div></div>
-  <div class="card" style="margin-top:12px"><div class="muted-sm">Debug:</div><pre id="log">loaded v8.4 (quick delete + copy fixes)</pre></div>
+  <div class="card" style="margin-top:12px"><div class="muted-sm">Debug:</div><pre id="log">loaded v8.5 (platform in messages + assign dropdown + scroll-to-new)</pre></div>
 </div>
 
 <div id="toastRoot"></div>
 
 <script>
-/* FluxFilm v8.4 quick delete + copy fixes
-   - dates shown DD-MMM-YYYY (e.g. 12-Sep-2025)
-   - add platform image URL input when creating a platform
-   - platform avatars render image if provided
-   - NEW: quick-delete customer from Accounts view
-   - FIX: copy templates use FluxFilm header + bold labels consistently
+/* FluxFilm v8.5
+   - Message templates updated:
+     • Accounts tab copy/WhatsApp: no name, includes platform line
+     • Customers tab copy/WhatsApp: includes platform line + greeting
+     • Remind and Bulk include platform line
+     • Labels bold; only platform line italic+bold; FluxFilm bold only; expiry dash if missing
+   - Assign dropdown shows: "email • platform"
+   - After adding customer: auto-scroll to the new card and highlight
 */
 
-const KEY='fluxfilm_v8_4_fix'
+const KEY='fluxfilm_v8_4_fix' // keep same storage key to preserve data
 
 // small util and logging
 function nowLog(s){ const p=document.getElementById('log'); p.textContent = new Date().toISOString().slice(11,19) + ' - ' + s + '\n' + p.textContent }
@@ -197,7 +198,53 @@ function daysLeft(dateStr){ if(!dateStr) return null; const d=new Date(dateStr);
 function esc(s){ if(s===undefined||s===null) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') }
 async function robustCopy(text){ try{ if(navigator.clipboard && navigator.clipboard.writeText){ await navigator.clipboard.writeText(text); return true } }catch(e){} try{ const ta=document.createElement('textarea'); ta.value=text; ta.style.position='fixed'; ta.style.left='-9999px'; document.body.appendChild(ta); ta.select(); const ok=document.execCommand('copy'); document.body.removeChild(ta); return !!ok }catch(e){return false} }
 
-// NEW: format YYYY-MM-DD -> DD-MMM-YYYY (e.g. 12-Sep-2025)
+// New: message builders with exact formatting rules
+// WhatsApp formatting: *bold*, _italic_, *_bold+italic_*
+// Only platform line italic+bold; everything else bold labels; FluxFilm bold only.
+function formatDateForMsg(dstr){
+  if(!dstr) return '—'
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dstr)
+  if(m){
+    const y = m[1], mm = m[2], dd = m[3]
+    const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+    const mon = monthNames[parseInt(mm,10)-1] || mm
+    return `${dd}-${mon}-${y}`
+  }
+  const dt = new Date(dstr)
+  if(!isNaN(dt.getTime())){
+    const dd = String(dt.getDate()).padStart(2,'0')
+    const mon = dt.toLocaleString(undefined,{month:'short'})
+    const y = dt.getFullYear()
+    return `${dd}-${mon}-${y}`
+  }
+  return '—'
+}
+function platformNameFromAccount(a){
+  return (state.platforms.find(x=>x.id===a.platformId)||{name:'Subscription'}).name
+}
+function templateAccounts(a){
+  const pName = platformNameFromAccount(a)
+  const expiry = formatDateForMsg(a.expiryDate)
+  return `🍿 *FluxFilm*
+🎬 *_${pName} Account_* 🎥
+
+📧 *Email:* ${a.email}
+🔐 *Password:* ${a.password || '—'}
+🗓 *Expiry:* ${expiry}`
+}
+function templateCustomers(c, acc){
+  const pName = acc && acc.platformId ? (state.platforms.find(p=>p.id===acc.platformId)||{name:'Subscription'}).name : 'Subscription'
+  const expiry = formatDateForMsg(c?.expiryDate)
+  const nm = c?.name ? `Hi ${c.name},\n\n` : ''
+  return `🍿 *FluxFilm*
+🎬 *_${pName} Account_* 🎥
+
+${nm}📧 *Email:* ${(acc?.email)||'—'}
+🔐 *Password:* ${(acc?.password)||'—'}
+🗓 *Expiry:* ${expiry}`
+}
+
+// NEW: format YYYY-MM-DD -> DD-MMM-YYYY (UI only)
 function fmtDate(dstr){
   if(!dstr) return ''
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dstr)
@@ -208,7 +255,6 @@ function fmtDate(dstr){
     const mon = monthNames[monIndex] || mm
     return `${dd}-${mon}-${y}`
   }
-  // try Date parsing for other formats
   const dt = new Date(dstr)
   if(!isNaN(dt.getTime())){
     const dd = String(dt.getDate()).padStart(2,'0')
@@ -376,7 +422,7 @@ function renderSearchResults(q){
   }
   if(custMatches.length===0 && accMatches.length===0){ const no=document.createElement('div'); no.className='muted-sm'; no.textContent='No matches'; root.appendChild(no) }
 }
-
+<script>
 // render All
 function renderAll(){
   populateFilterPlatform()
@@ -417,22 +463,26 @@ function renderAll(){
     div.innerHTML = `${avatarHtml}<div class="meta"><div style="font-weight:700">${esc(p.name)} — ${esc(a.email)} ${a.expiryDate?'<span style="margin-left:8px;font-weight:700">📅 '+fmtDate(a.expiryDate)+'</span>':''}</div><div class="muted-sm">${a.password? '(pwd saved)':''}</div><div class="muted-sm" style="margin-top:6px">Assigned:</div><div style="margin-top:4px" class="muted-sm">${customersAssigned||'—'}</div><div style="margin-top:8px">${badgeHtmlForDays(days)} <span style="margin-left:8px;font-weight:700">${days===null? '' : (days<=0? 'Expired' : days+' days left')}</span></div><div class="muted-sm" style="margin-top:8px">Pwd: ${esc(pwd)}</div><div class="muted-sm">Notes: ${esc(a.notes||'—')}</div></div>`
     const right=document.createElement('div'); right.className='actions'
     const editBtn=document.createElement('button'); editBtn.className='small'; editBtn.textContent='Edit'; editBtn.onclick=()=> openAccountInline(document.getElementById('addAccountInline'), a.id)
+
+    // Updated COPY / WhatsApp with platform line and no name on All/Accounts lists
     const copyBtn=document.createElement('button'); copyBtn.className='small'; copyBtn.textContent='Copy'; copyBtn.onclick=async ()=>{
-      const firstCust = (a.customers && a.customers.length>0) ? (state.customers.find(c=>c.id===a.customers[0])||{name:''}).name : ''
-      const text = `🍿 *FluxFilm*\nHi ${firstCust||''},\n\n📧 *Email:* ${a.email}\n🔐 *Password:* ${a.password||'—'}\n🗓️ *Expiry:* ${a.expiryDate||'—'}`
+      const text = templateAccounts(a)
       const ok = await robustCopy(text); if(ok){ toast('Copied credentials to clipboard'); nowLog('Copied creds for '+a.email) } else alert('Copy failed — select & copy manually')
     }
     const waBtn=document.createElement('button'); waBtn.className='small'; waBtn.textContent='WhatsApp'
-    waBtn.onclick = ()=>{ const firstCust = (a.customers && a.customers.length>0) ? (state.customers.find(c=>c.id===a.customers[0])||{name:''}).name : ''; const msg = `🍿 *FluxFilm*\nHi ${firstCust||''},\n\n📧 *Email:* ${a.email}\n🔐 *Password:* ${a.password||'—'}\n🗓️ *Expiry:* ${a.expiryDate||'—'}\n\nEnjoy!`; if(confirm('Open WhatsApp to send message? (Cancel to copy)')) location.href = 'https://wa.me/?text=' + encodeURIComponent(msg); else robustCopy(msg).then(ok=> ok? toast('Message copied') : alert('Copy failed')) }
+    waBtn.onclick = ()=>{ const msg = templateAccounts(a); if(confirm('Open WhatsApp to send message? (Cancel to copy)')) location.href = 'https://wa.me/?text=' + encodeURIComponent(msg); else robustCopy(msg).then(ok=> ok? toast('Message copied') : alert('Copy failed')) }
+
+    // Remind (no name here; include platform)
     const remindBtn=document.createElement('button'); remindBtn.className='small'; remindBtn.textContent='Remind'
-    remindBtn.onclick = ()=>{ const msg = `🔔 *Reminder*\nHi ${(a.customers&&a.customers.length)? (state.customers.find(c=>c.id===a.customers[0])||{name:''}).name : ''},\n\nYour subscription (${a.email}) expires on *${a.expiryDate||'—'}*. Please renew.\n\nThanks,\nFluxFilm`; if(confirm('Open WhatsApp to send reminder? (Cancel to copy)')) location.href = 'https://wa.me/?text=' + encodeURIComponent(msg); else robustCopy(msg).then(ok=> ok? toast('Reminder copied') : alert('Copy failed')) }
+    remindBtn.onclick = ()=>{ const msg = templateAccounts(a); if(confirm('Open WhatsApp to send reminder? (Cancel to copy)')) location.href = 'https://wa.me/?text=' + encodeURIComponent(`🔔 Reminder\n\n${msg}`); else robustCopy(`🔔 Reminder\n\n${msg}`).then(ok=> ok? toast('Reminder copied') : alert('Copy failed')) }
+
     const delBtn=document.createElement('button'); delBtn.className='danger'; delBtn.textContent='Delete'; delBtn.onclick=()=>{ if(confirm('Delete this account?')){ lastDeleted={type:'account',data:a,time:Date.now()}; state.accounts=state.accounts.filter(x=>x.id!==a.id); state.customers.forEach(c=>{ if(c.accounts) c.accounts=c.accounts.filter(ac=>ac!==a.id) }); saveState(state); renderAll(); renderAccounts(); renderCustomers(); showUndo() } }
     right.appendChild(editBtn); right.appendChild(copyBtn); right.appendChild(waBtn); right.appendChild(remindBtn); right.appendChild(delBtn)
     div.appendChild(right); root.appendChild(div)
   })
 }
 
-// render Accounts (platform)
+// render Accounts (platform view)
 function renderAccounts(){
   platformAccounts.innerHTML=''
   if(!selectedPlatformId){ platformAccounts.innerHTML='<div class="muted-sm">Click a platform on the left to see its accounts.</div>'; return }
@@ -456,11 +506,15 @@ function renderAccounts(){
     const avatarHtml = p.imageUrl ? `<div class="avatar"><img src="${esc(p.imageUrl)}" alt="${esc(p.name)}" onerror="this.parentNode.innerHTML='${esc(p.name.slice(0,2).toUpperCase())}'"/></div>` : `<div class="avatar">${esc(p.name.slice(0,2).toUpperCase())}</div>`
     d.innerHTML = `${avatarHtml}<div class="meta"><div style="font-weight:700">${esc(a.email)} ${a.expiryDate?'<span style="margin-left:8px;font-weight:700">📅 '+fmtDate(a.expiryDate)+'</span>':''}</div><div class="muted-sm">Start: ${a.startDate?fmtDate(a.startDate):'—'} • Expiry: ${a.expiryDate?fmtDate(a.expiryDate):'—'}</div><div style="margin-top:8px">${badgeHtmlForDays(days)} <strong style="margin-left:8px">${days===null? '' : (days<=0? 'Expired' : days+' days left')}</strong></div><div style="margin-top:8px" class="muted-sm">Customers assigned:</div>${custHtml}<div class="muted-sm" style="margin-top:8px">Notes: ${esc(a.notes||'—')}</div><div class="acct-actions" id="acct_actions_${a.id}"></div></div>`
     const actionsContainer = d.querySelector(`#acct_actions_${a.id}`)
+
     const edit=document.createElement('button'); edit.className='small'; edit.textContent='Edit'; edit.onclick=()=> openAccountInline(document.getElementById('addAccountInlineAccounts'), a.id)
     const addCust=document.createElement('button'); addCust.className='small'; addCust.textContent='Add customer'; addCust.onclick=()=> toggleAddCustomerInline(a.id)
-    const copy=document.createElement('button'); copy.className='small'; copy.textContent='Copy'; copy.onclick=async ()=>{ const text=`🍿 *FluxFilm*\nHi ${(customersForAcc[0]?.name)||''},\n\n📧 *Email:* ${a.email}\n🔐 *Password:* ${a.password||'—'}\n🗓️ *Expiry:* ${a.expiryDate||'—'}`; const ok=await robustCopy(text); if(ok) toast('Copied credentials'); else alert('Copy failed') }
-    const wa=document.createElement('button'); wa.className='small'; wa.textContent='WhatsApp'; wa.onclick=()=>{ const msg=`🍿 *FluxFilm*\nHi ${(customersForAcc[0]?.name)||''},\n\n📧 *Email:* ${a.email}\n🔐 *Password:* ${a.password||'—'}\n🗓️ *Expiry:* ${a.expiryDate||'—'}\n\nEnjoy!`; if(confirm('Open WhatsApp to send message? (Cancel to copy)')) location.href='https://wa.me/?text='+encodeURIComponent(msg); else robustCopy(msg).then(ok=> ok? toast('Message copied') : alert('Copy failed')) }
-    const remind=document.createElement('button'); remind.className='small'; remind.textContent='Remind'; remind.onclick=()=>{ const msg=`🔔 *Reminder*\nHi ${(customersForAcc[0]?.name)||''},\n\nYour subscription (${a.email}) expires on *${a.expiryDate||'—'}*. Please renew.\n\nThanks,\nFluxFilm`; if(confirm('Open WhatsApp to send reminder? (Cancel to copy)')) location.href='https://wa.me/?text='+encodeURIComponent(msg); else robustCopy(msg).then(ok=> ok? toast('Reminder copied') : alert('Copy failed')) }
+
+    // Updated COPY/WA/REMIND use platform line; no name on Accounts view
+    const copy=document.createElement('button'); copy.className='small'; copy.textContent='Copy'; copy.onclick=async ()=>{ const text=templateAccounts(a); const ok=await robustCopy(text); if(ok) toast('Copied credentials'); else alert('Copy failed') }
+    const wa=document.createElement('button'); wa.className='small'; wa.textContent='WhatsApp'; wa.onclick=()=>{ const msg=templateAccounts(a); if(confirm('Open WhatsApp to send message? (Cancel to copy)')) location.href='https://wa.me/?text='+encodeURIComponent(msg); else robustCopy(msg).then(ok=> ok? toast('Message copied') : alert('Copy failed')) }
+    const remind=document.createElement('button'); remind.className='small'; remind.textContent='Remind'; remind.onclick=()=>{ const msg=templateAccounts(a); if(confirm('Open WhatsApp to send reminder? (Cancel to copy)')) location.href='https://wa.me/?text='+encodeURIComponent('🔔 Reminder\n\n'+msg); else robustCopy('🔔 Reminder\n\n'+msg).then(ok=> ok? toast('Reminder copied') : alert('Copy failed')) }
+
     const del=document.createElement('button'); del.className='danger'; del.textContent='Delete'; del.onclick=()=>{ if(confirm('Delete account?')){ lastDeleted={type:'account',data:a,time:Date.now()}; state.accounts=state.accounts.filter(x=>x.id!==a.id); state.customers.forEach(c=>{ if(a.customers?.includes(c.id)) c.accountId=null; }); saveState(state); renderAccounts(); renderCustomers(); renderAll(); showUndo() } }
     actionsContainer.appendChild(edit)
     actionsContainer.appendChild(addCust)
@@ -490,6 +544,10 @@ function quickDeleteCustomer(id){
 // Add / Edit customers inline
 const addCustomerBtn = document.getElementById('addCustomerBtn'), addCustomerInline = document.getElementById('addCustomerInline')
 addCustomerBtn.onclick = ()=> toggleAddCustomerInline()
+function acctLabel(a){
+  const plat = a.platformId ? (state.platforms.find(p=>p.id===a.platformId)||{name:'Unknown'}).name : '—'
+  return `${a.email} • ${plat}`
+}
 function toggleAddCustomerInline(preselectAccountId){
   if(viewCust.style.display === 'none'){ setTab('customers'); setTimeout(()=> toggleAddCustomerInline(preselectAccountId), 140); return }
   const container = addCustomerInline
@@ -502,7 +560,7 @@ function toggleAddCustomerInline(preselectAccountId){
     <div style="display:flex;gap:8px;margin-top:6px"><div style="flex:1"><label>Start</label><input id="ic_start" type="date" /></div><div style="flex:1"><label>Expiry</label><input id="ic_expiry" type="date" /></div></div>
     <label><input id="ic_private" type="checkbox" /> Private profile</label>
     <label>Assign to account</label>
-    <select id="ic_assign"><option value="">-- no account --</option>${state.accounts.map(a=>`<option value="${a.id}" ${preselectAccountId===a.id?'selected':''}>${esc(a.email)}</option>`).join('')}</select>
+    <select id="ic_assign"><option value="">-- no account --</option>${state.accounts.map(a=>`<option value="${a.id}" ${preselectAccountId===a.id?'selected':''}>${esc(acctLabel(a))}</option>`).join('')}</select>
     <label>Notes</label><textarea id="ic_notes"></textarea>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px"><button id="ic_cancel" class="secondary">Cancel</button><button id="ic_save" class="secondary">Save</button></div>
   </div>`
@@ -515,10 +573,21 @@ function toggleAddCustomerInline(preselectAccountId){
     state.customers.unshift(cust)
     if(cust.accountId){ const acc=state.accounts.find(a=>a.id===cust.accountId); if(acc){ acc.customers = acc.customers || []; if(!acc.customers.includes(cust.id)) acc.customers.push(cust.id); cust.accounts=[cust.accountId] } }
     saveState(state); container.style.display='none'; container.innerHTML=''; renderCustomers(); renderAll(); renderAccounts(); nowLog('Customer added '+name)
+
+    // scroll to new customer and highlight
+    setTimeout(()=>{
+      const el = document.getElementById('cust_'+cust.id);
+      if(el){
+        el.scrollIntoView({behavior:'smooth', block:'center'});
+        const old = el.style.boxShadow;
+        el.style.boxShadow = '0 0 0 3px rgba(37, 99, 235, .35)';
+        setTimeout(()=>{ el.style.boxShadow = old || ''; }, 1600);
+      }
+    }, 80);
   }
 }
 
-// render customers (with visible countdown & Bold header in copy)
+// render customers (with id for scroll and updated templates)
 function renderCustomers(){
   const q=(document.getElementById('globalSearch').value||'').toLowerCase()
   let list = state.customers.slice()
@@ -532,34 +601,52 @@ function renderCustomers(){
   list.forEach(c=>{
     if(q && !((c.name||'').toLowerCase().includes(q) || (c.phone||'').toLowerCase().includes(q) || (c.profile||'').toLowerCase().includes(q))) return
     const days = c.expiryDate ? daysLeft(c.expiryDate) : null
-    const div=document.createElement('div'); div.className='item'
-    const accEmail = c.accountId ? (state.accounts.find(a=>a.id===c.accountId)||{email:'—'}).email : '—'
+    const div=document.createElement('div'); div.className='item'; div.id = `cust_${c.id}`
+    const accObj = c.accountId ? (state.accounts.find(a=>a.id===c.accountId)||null) : null
+    const accEmail = accObj ? (accObj.email||'—') : '—'
     const accountsCount = (c.accounts && c.accounts.length) ? c.accounts.length : ((c.accountId)?1:0)
     const privateBadge = c.private ? '<span class="private-badge">P</span>' : ''
     div.innerHTML = `<div class="left"><div class="avatar">${esc((c.name||'').slice(0,2).toUpperCase())}</div><div class="meta"><div style="font-weight:700">${esc(c.name)} ${privateBadge}</div><div class="muted-sm">${esc(accEmail)} • Profile: ${esc(c.profile||'—')} • Accounts: ${accountsCount}</div><div style="margin-top:8px"><span style="font-weight:700">${days===null?'': (days<=0? '⚠️ Expired' : (days<=7? '⏳ '+days+' days left' : '✅ '+days+' days left'))}</span> ${c.expiryDate?('<span style="margin-left:8px;font-weight:700">📅 '+fmtDate(c.expiryDate)+'</span>') : ''}</div><div class="muted-sm" style="margin-top:6px">Notes: ${esc(c.notes||'—')}</div><div class="cust-actions" id="cust_actions_${c.id}"></div></div></div>`
-    const btnsContainer = document.createElement('div')
-    div.querySelector('.meta')
+    const actionsHolder = div.querySelector(`#cust_actions_${c.id}`)
+
     const cb=document.createElement('input'); cb.type='checkbox'; cb.className='custSelect'; cb.dataset.id=c.id; cb.style.marginBottom='8px'
     const edit=document.createElement('button'); edit.className='small'; edit.textContent='Edit'; edit.onclick=()=> openCustomerEditInline(c.id)
+
+    // Copy Id uses platform line and greeting
     const copyId=document.createElement('button'); copyId.className='small'; copyId.textContent='Copy Id'
     copyId.onclick = async ()=>{
-      const acc = state.accounts.find(a=>a.id===c.accountId) || {email:'—', password:'—'}
-      const msg = `🍿 *FluxFilm*\nHi ${c.name || ''},\n\n📧 *Email:* ${acc.email}\n🔐 *Password:* ${acc.password || '—'}\n🗓 *Expiry:* ${c.expiryDate || '—'}\n\nThanks,\nFluxFilm`
+      const acc = accObj || {email:'—', password:'—', platformId:null}
+      const msg = templateCustomers(c, acc)
       const ok = await robustCopy(msg)
       if(ok) toast('Copied message'); else alert('Copy failed')
       nowLog('Copied message for '+(c.name||''))
     }
+
+    // WhatsApp uses same template
     const wa=document.createElement('button'); wa.className='small'; wa.textContent='WhatsApp'
-    wa.onclick = ()=>{ const acc = state.accounts.find(a=>a.id===c.accountId) || {email:'—', password:'—'}; const msg = `🍿 *FluxFilm*\nHi ${c.name || ''},\n\n📧 *Email:* ${acc.email}\n🔐 *Password:* ${acc.password || '—'}\n🗓 *Expiry:* ${c.expiryDate || '—'}`; if(confirm('Open WhatsApp to send message? (Cancel to copy)')) location.href = 'https://wa.me/?text=' + encodeURIComponent(msg); else robustCopy(msg).then(ok=> ok? toast('Copied message') : alert('Copy failed')) }
+    wa.onclick = ()=>{ 
+      const acc = accObj || {email:'—', password:'—', platformId:null}; 
+      const msg = templateCustomers(c, acc)
+      if(confirm('Open WhatsApp to send message? (Cancel to copy)')) location.href = 'https://wa.me/?text=' + encodeURIComponent(msg); else robustCopy(msg).then(ok=> ok? toast('Copied message') : alert('Copy failed')) 
+    }
+
+    // Remind with platform line and greeting
     const remind=document.createElement('button'); remind.className='small'; remind.textContent='Remind'
-    remind.onclick = ()=>{ const acc = state.accounts.find(a=>a.id===c.accountId) || {email:'—'}; const msg = `🔔 *Reminder*\nHi ${c.name}, your subscription (${acc.email}) expires on *${c.expiryDate||'—'}*. Please renew.`; if(confirm('Open WhatsApp to send message? (Cancel to copy)')) location.href = 'https://wa.me/?text=' + encodeURIComponent(msg); else robustCopy(msg).then(ok=> ok? toast('Copied reminder') : alert('Copy failed')) }
+    remind.onclick = ()=>{ 
+      const acc = accObj || {email:'—', platformId:null}; 
+      const msg = templateCustomers(c, acc)
+      const out = `🔔 Reminder\n\n${msg}`
+      if(confirm('Open WhatsApp to send reminder? (Cancel to copy)')) location.href = 'https://wa.me/?text=' + encodeURIComponent(out); else robustCopy(out).then(ok=> ok? toast('Copied reminder') : alert('Copy failed')) 
+    }
+
     const del=document.createElement('button'); del.className='danger'; del.textContent='Delete'; del.onclick=()=>{ if(confirm('Delete this customer?')){ lastDeleted={type:'customer',data:c,time:Date.now()}; state.customers=state.customers.filter(x=>x.id!==c.id); state.accounts.forEach(a=>{ if(a.customers) a.customers=a.customers.filter(cid=>cid!==c.id) }); saveState(state); renderCustomers(); renderAll(); renderAccounts(); showUndo() } }
-    const actionsHolder = div.querySelector(`#cust_actions_${c.id}`)
+
     actionsHolder.appendChild(edit)
     actionsHolder.appendChild(copyId)
     actionsHolder.appendChild(wa)
     actionsHolder.appendChild(remind)
     actionsHolder.appendChild(del)
+
     const parentMeta = div.querySelector('.meta')
     const cbWrap = document.createElement('div'); cbWrap.style.marginTop='8px'; cbWrap.appendChild(cb); parentMeta.appendChild(cbWrap)
 
@@ -568,24 +655,53 @@ function renderCustomers(){
   })
 }
 
-// bulk actions
-document.getElementById('bulkRemindBtn').onclick = ()=>{ const checks = Array.from(document.querySelectorAll('.custSelect')).filter(x=>x.checked); if(checks.length===0){ alert('Select customers first'); return } const msgs = checks.map(cb=>{ const c = state.customers.find(x=>x.id===cb.dataset.id); const acc = state.accounts.find(a=>a.id===c.accountId) || {email:'—'}; return `Hi ${c.name}, your subscription (${acc.email}) expires on ${c.expiryDate||'—'}.` }); const combined = msgs.join('\n\n'); if(confirm('Open WhatsApp to send combined message? (Cancel to copy)')) location.href = 'https://wa.me/?text=' + encodeURIComponent(combined); else robustCopy(combined).then(ok=> ok? toast('Copied') : alert('Copy failed')) }
-document.getElementById('bulkCopyBtn').onclick = ()=>{ const checks = Array.from(document.querySelectorAll('.custSelect')).filter(x=>x.checked); if(checks.length===0){ alert('Select customers first'); return } const lines = checks.map(cb=>{ const c = state.customers.find(x=>x.id===cb.dataset.id); const acc = state.accounts.find(a=>a.id===c.accountId) || {email:'—', password:'—'}; return `🍿 *FluxFilm*\nHi ${c.name},\n\n📧 *Email:* ${acc.email}\n🔐 *Password:* ${acc.password}\n🗓 *Expiry:* ${c.expiryDate||'—'}` }); robustCopy(lines.join('\n\n')).then(ok=> ok? toast('Copied') : alert('Copy failed')) }
+// bulk actions (now include platform line)
+document.getElementById('bulkRemindBtn').onclick = ()=>{
+  const checks = Array.from(document.querySelectorAll('.custSelect')).filter(x=>x.checked)
+  if(checks.length===0){ alert('Select customers first'); return }
+  const msgs = checks.map(cb=>{
+    const c = state.customers.find(x=>x.id===cb.dataset.id)
+    const acc = state.accounts.find(a=>a.id===c.accountId) || {email:'—', platformId:null}
+    return `🔔 Reminder\n\n${templateCustomers(c, acc)}`
+  })
+  const combined = msgs.join('\n\n')
+  if(confirm('Open WhatsApp to send combined message? (Cancel to copy)')) location.href = 'https://wa.me/?text=' + encodeURIComponent(combined); else robustCopy(combined).then(ok=> ok? toast('Copied') : alert('Copy failed'))
+}
+document.getElementById('bulkCopyBtn').onclick = ()=>{
+  const checks = Array.from(document.querySelectorAll('.custSelect')).filter(x=>x.checked)
+  if(checks.length===0){ alert('Select customers first'); return }
+  const lines = checks.map(cb=>{
+    const c = state.customers.find(x=>x.id===cb.dataset.id)
+    const acc = state.accounts.find(a=>a.id===c.accountId) || {email:'—', password:'—', platformId:null}
+    return templateCustomers(c, acc)
+  })
+  robustCopy(lines.join('\n\n')).then(ok=> ok? toast('Copied') : alert('Copy failed'))
+}
 document.getElementById('bulkSelectAll').onchange = (e)=>{ const ch = Array.from(document.querySelectorAll('.custSelect')); ch.forEach(cb=> cb.checked = e.target.checked) }
 
-// import/export/clear
-document.getElementById('fileImport').onchange = (e)=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=(ev)=>{ try{ const inc = JSON.parse(ev.target.result); state.platforms = inc.platforms && inc.platforms.length ? inc.platforms : state.platforms; state.accounts = [...(inc.accounts||[]), ...state.accounts]; state.customers = [...(inc.customers||[]), ...state.customers]; saveState(state); renderPlatforms(); renderAll(); renderAccounts(); renderCustomers(); toast('Imported JSON') }catch(err){ alert('Import failed') } }; r.readAsText(f) }
-document.getElementById('exportBtn').onclick = ()=>{ const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='fluxfilm_backup_v8_4.json'; a.click(); URL.revokeObjectURL(a.href); nowLog('Exported JSON'); toast('Exported JSON') }
-document.getElementById('exportCsvBtn').onclick = ()=>{ const rows=[["platform","email","password","startDate","expiryDate","notes","customers"]]; state.accounts.forEach(a=>{ const p=(state.platforms.find(x=>x.id===a.platformId)||{name:''}).name; const custs=(a.customers||[]).map(x=> (state.customers.find(c=>c.id===x)||{name:'?' }).name).join('|'); rows.push([p,a.email,a.password||'',a.startDate||'',a.expiryDate||'',(a.notes||'').replace(/\n/g,' ').replace(/,/g,''),custs]) }); const csv = rows.map(r=> r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n'); const blob = new Blob([csv],{type:'text/csv'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='fluxfilm_accounts_v8_4.csv'; a.click(); URL.revokeObjectURL(a.href); toast('Exported CSV'); nowLog('Exported CSV') }
+// import/export/clear (unchanged behavior)
+document.getElementById('fileImport').onchange = (e)=>{
+  const f=e.target.files[0]; if(!f) return; const r=new FileReader();
+  r.onload=(ev)=>{ try{
+    const inc = JSON.parse(ev.target.result);
+    state.platforms = inc.platforms && inc.platforms.length ? inc.platforms : state.platforms;
+    state.accounts = [...(inc.accounts||[]), ...state.accounts];
+    state.customers = [...(inc.customers||[]), ...state.customers];
+    saveState(state); renderPlatforms(); renderAll(); renderAccounts(); renderCustomers(); toast('Imported JSON')
+  }catch(err){ alert('Import failed') } };
+  r.readAsText(f)
+}
+document.getElementById('exportBtn').onclick = ()=>{ const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='fluxfilm_backup_v8_5.json'; a.click(); URL.revokeObjectURL(a.href); nowLog('Exported JSON'); toast('Exported JSON') }
+document.getElementById('exportCsvBtn').onclick = ()=>{ const rows=[["platform","email","password","startDate","expiryDate","notes","customers"]]; state.accounts.forEach(a=>{ const p=(state.platforms.find(x=>x.id===a.platformId)||{name:''}).name; const custs=(a.customers||[]).map(x=> (state.customers.find(c=>c.id===x)||{name:'?' }).name).join('|'); rows.push([p,a.email,a.password||'',a.startDate||'',a.expiryDate||'',(a.notes||'').replace(/\n/g,' ').replace(/,/g,''),custs]) }); const csv = rows.map(r=> r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n'); const blob = new Blob([csv],{type:'text/csv'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='fluxfilm_accounts_v8_5.csv'; a.click(); URL.revokeObjectURL(a.href); toast('Exported CSV'); nowLog('Exported CSV') }
 document.getElementById('clearBtn').onclick = ()=>{ if(confirm('Clear all accounts and customers?')){ state.accounts=[]; state.customers=[]; saveState(state); renderAll(); renderPlatforms(); renderAccounts(); renderCustomers(); toast('Cleared data') } }
 
-// export customers CSV (requested)
-document.getElementById('exportCustomersBtn').onclick = ()=>{ const rows=[["customer_name","platform","expiry_date"]]; state.customers.forEach(c=>{ const acc = state.accounts.find(a=>a.id===c.accountId); const platformName = acc ? (state.platforms.find(p=>p.id===acc.platformId)||{name:'Unknown'}).name : (c.accountId? 'Unknown' : '—'); rows.push([c.name, platformName, c.expiryDate ? fmtDate(c.expiryDate) : '' ]) }); const csv = rows.map(r=> r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n'); const blob = new Blob([csv],{type:'text/csv'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='fluxfilm_customers_v8_4.csv'; a.click(); URL.revokeObjectURL(a.href); toast('Exported customers CSV'); nowLog('Exported customers CSV') }
+// export customers CSV (unchanged except date format already pretty)
+document.getElementById('exportCustomersBtn').onclick = ()=>{ const rows=[["customer_name","platform","expiry_date"]]; state.customers.forEach(c=>{ const acc = state.accounts.find(a=>a.id===c.accountId); const platformName = acc ? (state.platforms.find(p=>p.id===acc.platformId)||{name:'Unknown'}).name : (c.accountId? 'Unknown' : '—'); rows.push([c.name, platformName, c.expiryDate ? fmtDate(c.expiryDate) : '' ]) }); const csv = rows.map(r=> r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n'); const blob = new Blob([csv],{type:'text/csv'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='fluxfilm_customers_v8_5.csv'; a.click(); URL.revokeObjectURL(a.href); toast('Exported customers CSV'); nowLog('Exported customers CSV') }
 
 // undo toast
 function showUndo(){ const root=document.getElementById('toastRoot'); root.innerHTML=''; const t=document.createElement('div'); t.className='toast'; t.innerHTML=`<div>Item deleted</div><div><button id="undoBtn" class="small secondary">Undo</button></div>`; root.appendChild(t); document.getElementById('undoBtn').onclick=()=>{ if(!lastDeleted) return; if(lastDeleted.type==='account') state.accounts.unshift(lastDeleted.data); if(lastDeleted.type==='customer') state.customers.unshift(lastDeleted.data); saveState(state); renderAll(); renderAccounts(); renderCustomers(); root.innerHTML=''; lastDeleted=null; nowLog('Undo performed') }; setTimeout(()=>{ try{ document.getElementById('toastRoot').innerHTML='' }catch(e){}; lastDeleted=null },7000) }
 
-// edit customer inline
+// edit customer inline (assign dropdown shows email • platform)
 function openCustomerEditInline(id){
   const c = state.customers.find(x=>x.id===id); if(!c) return
   const container = document.getElementById('addCustomerInline')
@@ -597,7 +713,7 @@ function openCustomerEditInline(id){
     <div style="display:flex;gap:8px;margin-top:6px"><div style="flex:1"><label>Start</label><input id="ic_start_e" type="date" value="${c.startDate||''}" /></div><div style="flex:1"><label>Expiry</label><input id="ic_expiry_e" type="date" value="${c.expiryDate||''}" /></div></div>
     <label><input id="ic_private_e" type="checkbox" ${c.private? 'checked':''} /> Private profile</label>
     <label>Assign to account</label>
-    <select id="ic_assign_e"><option value="">-- no account --</option>${state.accounts.map(a=>`<option value="${a.id}" ${c.accountId===a.id?'selected':''}>${esc(a.email)}</option>`).join('')}</select>
+    <select id="ic_assign_e"><option value="">-- no account --</option>${state.accounts.map(a=>`<option value="${a.id}" ${c.accountId===a.id?'selected':''}>${esc(acctLabel(a))}</option>`).join('')}</select>
     <label>Notes</label><textarea id="ic_notes_e">${esc(c.notes||'')}</textarea>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px"><button id="ic_cancel_e" class="secondary">Cancel</button><button id="ic_save_e" class="secondary">Save</button></div>
   </div>`
@@ -625,7 +741,7 @@ document.getElementById('allFilter').addEventListener('change', renderAll)
 document.getElementById('allSort').addEventListener('change', renderAll)
 document.getElementById('maskToggle').addEventListener('change', renderAll)
 
-// Business overview
+// Business overview (unchanged logic)
 function renderBusiness(){
   const counts = {}
   state.platforms.forEach(p=> counts[p.name]=0)
@@ -656,21 +772,15 @@ function renderBusiness(){
   const monthLabels = months.map(m=>{ const [y,mo]=m.split('-'); const d=new Date(y,parseInt(mo,10)-1); return d.toLocaleString(undefined,{month:'short',year:'2-digit'}) })
   drawBarChart('monthlyChart', monthLabels, monthCounts, 'New customers')
 }
-
 function parseMonthInputToRange(monthStr){ if(!monthStr) return null; const [y,mo] = monthStr.split('-'); const start = new Date(Number(y), Number(mo)-1, 1); const end = new Date(Number(y), Number(mo), 0); return {start, end} }
-
-document.addEventListener('click', function(){ /* ensure elements exist */ setTimeout(()=>{},0) })
-
 document.getElementById('bizWeek')?.addEventListener('click', ()=>{ const now=new Date(); const start=new Date(now); start.setDate(now.getDate()-7); const end=new Date(now); applyBusinessRange(start,end) })
 document.getElementById('bizMonth')?.addEventListener('click', ()=>{ const now=new Date(); const start=new Date(now.getFullYear(), now.getMonth(), 1); const end=new Date(now.getFullYear(), now.getMonth()+1,0); applyBusinessRange(start,end) })
 document.getElementById('bizLastMonth')?.addEventListener('click', ()=>{ const now=new Date(); const start=new Date(now.getFullYear(), now.getMonth()-1, 1); const end=new Date(now.getFullYear(), now.getMonth(), 0); applyBusinessRange(start,end) })
 document.getElementById('bizShow')?.addEventListener('click', ()=>{ const f=document.getElementById('bizFrom').value; const t=document.getElementById('bizTo').value; if(!f||!t){ alert('Select From and To'); return } const r1=parseMonthInputToRange(f); const r2=parseMonthInputToRange(t); applyBusinessRange(r1.start, r2.end) })
-
 function applyBusinessRange(startDate, endDate){ const countsRange={}; state.platforms.forEach(p=> countsRange[p.name]=0); state.customers.forEach(c=>{ const created = c.createdAt ? new Date(c.createdAt) : (c.startDate? new Date(c.startDate) : null); if(!created) return; if(created >= startDate && created <= endDate){ if(c.accountId){ const acc = state.accounts.find(a=>a.id===c.accountId); const pname = (state.platforms.find(p=>p.id===acc.platformId)||{name:'Other'}).name; countsRange[pname] = (countsRange[pname]||0)+1 } } }); const labels = Object.keys(countsRange); const data = labels.map(l=>countsRange[l]||0); drawBarChart('platformChart', labels, data, 'Customers'); const total = Object.values(countsRange).reduce((s,v)=>s+v,0); document.getElementById('businessStats').innerHTML = `<div>Customers in range: <strong>${total}</strong></div><div style="margin-top:6px">${Object.keys(countsRange).map(k=>`${esc(k)}: <strong>${countsRange[k]}</strong>`).join(' · ')}</div>` }
-
 function getLastNMonths(n){ const arr=[]; const now=new Date(); now.setDate(1); for(let i=n-1;i>=0;i--){ const d=new Date(now.getFullYear(), now.getMonth()-i,1); arr.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`) } return arr }
 
-// simple canvas bar chart (improved spacing & label wrapping)
+// canvas bar chart (unchanged)
 function drawBarChart(canvasId, labels, data, ylabel){
   const c=document.getElementById(canvasId); if(!c) return
   const DPR = window.devicePixelRatio || 1
@@ -703,8 +813,8 @@ function drawBarChart(canvasId, labels, data, ylabel){
 }
 
 // initial rendering
-renderPlatforms(); renderAll(); renderAccounts(); renderCustomers(); nowLog('initialized v8.4 (quick delete + copy fixes)')
-
+renderPlatforms(); renderAll(); renderAccounts(); renderCustomers(); nowLog('initialized v8.5')
 </script>
 </body>
 </html>
+
