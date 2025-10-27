@@ -297,6 +297,34 @@ ${nm}📧 *Email:* ${(acc?.email)||'—'}
 🔐 *Password:* ${(acc?.password)||'—'}
 🗓 *Expiry:* ${expiry}`
 }
+function templateCustomerReminder(c, acc){
+  const platformName = acc && acc.platformId ? (state.platforms.find(p=>p.id===acc.platformId)||{name:'Subscription'}).name : 'Subscription'
+  const expiryDate = c?.expiryDate || ''
+  const expiry = formatDateForMsg(expiryDate)
+  const days = expiryDate ? daysLeft(expiryDate) : null
+  const greeting = c?.name ? `Hi ${c.name}!` : 'Hi there!'
+
+  let statusLine = '⚠️ Expiry date not recorded — please check and renew as soon as you can.'
+  if(days === null){
+    statusLine = '⚠️ Expiry date not recorded — please check and renew as soon as you can.'
+  }else if(days < 0){
+    const overdue = Math.abs(days)
+    statusLine = `⚠️ This subscription expired *${overdue} day${overdue===1?'':'s'}* ago.`
+  }else if(days === 0){
+    statusLine = '⚠️ This subscription expires *today*.'
+  }else{
+    statusLine = `⏳ Only *${days} day${days===1?'':'s'}* left before it expires.`
+  }
+
+  return `🔔 *Renewal Reminder*
+
+${greeting} 😊
+📺 Subscription: *_${platformName}_*
+🗓 *Expiry:* ${expiry}
+${statusLine}
+
+💳 Please renew to keep enjoying uninterrupted streaming.`
+}
 
 function templateCustomerReminder(c, acc){
   const platformName = acc && acc.platformId ? (state.platforms.find(p=>p.id===acc.platformId)||{name:'Subscription'}).name : 'Subscription'
@@ -731,6 +759,11 @@ function renderCustomers(){
 
     // Remind with platform line and greeting
     const remind=document.createElement('button'); remind.className='small'; remind.textContent='Remind'
+    remind.onclick = ()=>{ 
+      const acc = accObj || {email:'—', platformId:null}; 
+      const msg = templateCustomers(c, acc)
+      const out = `🔔 Reminder\n\n${msg}`
+      if(confirm('Open WhatsApp to send reminder? (Cancel to copy)')) location.href = 'https://wa.me/?text=' + encodeURIComponent(out); else robustCopy(out).then(ok=> ok? toast('Copied reminder') : alert('Copy failed')) 
     remind.onclick = ()=>{
       const acc = accObj || {platformId:null};
       const out = templateCustomerReminder(c, acc)
@@ -759,6 +792,8 @@ document.getElementById('bulkRemindBtn').onclick = ()=>{
   if(checks.length===0){ alert('Select customers first'); return }
   const msgs = checks.map(cb=>{
     const c = state.customers.find(x=>x.id===cb.dataset.id)
+    const acc = state.accounts.find(a=>a.id===c.accountId) || {email:'—', platformId:null}
+    return `🔔 Reminder\n\n${templateCustomers(c, acc)}`
     const acc = state.accounts.find(a=>a.id===c.accountId) || {platformId:null}
     return templateCustomerReminder(c, acc)
   })
