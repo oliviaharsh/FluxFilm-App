@@ -188,110 +188,7 @@
    - Added improved reminder message for customer "Remind" button (includes emoji, platform name, due date and how many days overdue)
 */
 
-const KEY='fluxfilm_v8_4_fix' // keep same storage key to preserve data
-const DEFAULT_PLATFORMS=[
-  {id:'p_netflix',name:'Netflix'},
-  {id:'p_prime',name:'Prime'},
-  {id:'p_hotstar',name:'Hotstar'},
-  {id:'p_yt',name:'YT Premium'}
-]
-
-function cloneDefaultPlatforms(){ return DEFAULT_PLATFORMS.map(p=>({...p})) }
-function createDefaultState(){ return {platforms:cloneDefaultPlatforms(),accounts:[],customers:[]} }
-
-function normalizeState(raw){
-  const base=createDefaultState()
-  if(!raw||typeof raw!=='object') return {state:base,changed:true}
-  let changed=false
-
-  const toStringSafe=(val)=> val===undefined||val===null ? '' : String(val)
-
-  let platforms
-  if(Array.isArray(raw.platforms)){
-    platforms=raw.platforms.filter(p=>p && typeof p==='object').map(p=>{
-      const copy={
-        id: toStringSafe(p.id) || 'p_'+uid(),
-        name: toStringSafe(p.name) || 'Subscription',
-        imageUrl: p.imageUrl ? toStringSafe(p.imageUrl) : null
-      }
-      if(copy.id!==p.id || copy.name!==p.name || (p.imageUrl&&!copy.imageUrl)){ changed=true }
-      return copy
-    })
-    if(platforms.length!==raw.platforms.length) changed=true
-  }else{
-    platforms=base.platforms
-    changed=true
-  }
-
-  let accounts
-  if(Array.isArray(raw.accounts)){
-    accounts=raw.accounts.filter(a=>a && typeof a==='object').map(a=>{
-      const copy={...a}
-      copy.id = toStringSafe(copy.id) || 'a_'+uid()
-      copy.email = toStringSafe(copy.email)
-      copy.platformId = copy.platformId ? toStringSafe(copy.platformId) : null
-      copy.startDate = copy.startDate ? toStringSafe(copy.startDate) : ''
-      copy.expiryDate = copy.expiryDate ? toStringSafe(copy.expiryDate) : ''
-      copy.notes = copy.notes ? toStringSafe(copy.notes) : ''
-      if(!Array.isArray(copy.customers)){ copy.customers=[]; if(a&&a.customers&&a.customers.length) changed=true }
-      else{
-        const filtered=copy.customers.filter(x=>x && typeof x==='string')
-        if(filtered.length!==copy.customers.length){ copy.customers=filtered; changed=true }
-      }
-      if(copy.id!==a.id || copy.email!==a.email || copy.platformId!==a.platformId) changed=true
-      return copy
-    })
-    if(accounts.length!==raw.accounts.length) changed=true
-  }else{
-    accounts=[]
-    changed=true
-  }
-
-  let customers
-  if(Array.isArray(raw.customers)){
-    customers=raw.customers.filter(c=>c && typeof c==='object').map(c=>{
-      const copy={...c}
-      copy.id = toStringSafe(copy.id) || 'c_'+uid()
-      copy.name = toStringSafe(copy.name)
-      copy.phone = copy.phone ? toStringSafe(copy.phone) : ''
-      copy.profile = copy.profile ? toStringSafe(copy.profile) : ''
-      copy.startDate = copy.startDate ? toStringSafe(copy.startDate) : ''
-      copy.expiryDate = copy.expiryDate ? toStringSafe(copy.expiryDate) : ''
-      copy.notes = copy.notes ? toStringSafe(copy.notes) : ''
-      copy.private = !!copy.private
-      copy.accountId = copy.accountId ? toStringSafe(copy.accountId) : null
-      if(!Array.isArray(copy.accounts)){ copy.accounts=[]; if(c&&c.accounts&&c.accounts.length) changed=true }
-      else{
-        const filtered=copy.accounts.filter(x=>x && typeof x==='string')
-        if(filtered.length!==copy.accounts.length){ copy.accounts=filtered; changed=true }
-      }
-      if(copy.id!==c.id || copy.accountId!==c.accountId) changed=true
-      return copy
-    })
-    if(customers.length!==raw.customers.length) changed=true
-  }else{
-    customers=[]
-    changed=true
-  }
-
-  const platformIds=new Set(platforms.map(p=>p.id))
-  const accountIds=new Set(accounts.map(a=>a.id))
-  const customerIds=new Set(customers.map(c=>c.id))
-
-  accounts.forEach(acc=>{
-    if(acc.platformId && !platformIds.has(acc.platformId)){ acc.platformId=null; changed=true }
-    const filtered=acc.customers.filter(id=>customerIds.has(id))
-    if(filtered.length!==acc.customers.length){ acc.customers=filtered; changed=true }
-  })
-
-  customers.forEach(cust=>{
-    if(cust.accountId && !accountIds.has(cust.accountId)){ cust.accountId=null; changed=true }
-    const filtered=cust.accounts.filter(id=>accountIds.has(id))
-    if(filtered.length!==cust.accounts.length){ cust.accounts=filtered; changed=true }
-  })
-
-  return {state:{platforms,accounts,customers},changed}
-}
+const KEY = 'fluxfilm_v8_4_fix'
 
 const DEFAULT_PLATFORMS = [
   {id:'p_netflix', name:'Netflix'},
@@ -414,36 +311,27 @@ function templateCustomerReminder(c, acc){
   const expiry = formatDateForMsg(expiryDate)
   const days = expiryDate ? daysLeft(expiryDate) : null
   const greeting = c?.name ? `Hi ${c.name}!` : 'Hi there!'
-
   let statusLine = '⚠️ Expiry date not recorded — please check and renew as soon as you can.'
-  let callToAction = '💳 Please renew to keep enjoying uninterrupted streaming.'
-
   if(days === null){
     statusLine = '⚠️ Expiry date not recorded — please check and renew as soon as you can.'
-    callToAction = '💳 Please renew so we can keep your access active.'
   }else if(days < 0){
     const overdue = Math.abs(days)
-    statusLine = `⏰ This subscription has been due for *${overdue} day${overdue===1?'':'s'}* (expired on ${expiry}).`
-    callToAction = '💳 Please renew today so we can reactivate your access right away.'
+    statusLine = `⚠️ This subscription expired *${overdue} day${overdue===1?'':'s'}* ago.`
   }else if(days === 0){
     statusLine = '⚠️ This subscription expires *today*.'
-    callToAction = '💳 A quick renewal now will keep everything running without interruption.'
   }else{
     statusLine = `⏳ Only *${days} day${days===1?'':'s'}* left before it expires.`
-    callToAction = '💳 Please renew soon to avoid any service break.'
   }
-
   return `🔔 *Renewal Reminder*
 
 ${greeting} 😊
 📺 Subscription: *_${platformName}_*
-🗓 *Expiry Date:* ${expiry}
+🗓 *Expiry:* ${expiry}
 ${statusLine}
 
-${callToAction}`
+💳 Please renew to keep enjoying uninterrupted streaming.`
 }
 
-// NEW: format YYYY-MM-DD -> DD-MMM-YYYY (UI only)
 function fmtDate(dstr){
   if(!dstr) return ''
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dstr)
@@ -479,10 +367,9 @@ function loadState(){
   return fresh
 }
 function saveState(s){
-  const {state:normalized,changed} = normalizeState(s)
-  state = normalized
-  try{ localStorage.setItem(KEY, JSON.stringify(normalized)) }catch(e){}
-  nowLog(changed ? 'state sanitized + saved' : 'state saved')
+  const {state} = normalizeState(s)
+  try{ localStorage.setItem(KEY, JSON.stringify(state)) }catch(e){}
+  nowLog('state saved')
 }
 
 let state = loadState()
@@ -868,10 +755,28 @@ function renderCustomers(){
     // REMIND: Build an improved, human-friendly reminder message with emoji, platform name, due date and days overdue/left
     const remind=document.createElement('button'); remind.className='small'; remind.textContent='Remind'
     remind.onclick = ()=>{
-      const acc = accObj || {platformId:null};
-      const out = templateCustomerReminder(c, acc)
-      if(confirm('Open WhatsApp to send reminder? (Cancel to copy)')) location.href = 'https://wa.me/?text=' + encodeURIComponent(out); else robustCopy(out).then(ok=> ok? toast('Copied reminder') : alert('Copy failed'))
-    }
+      const acc = accObj || {platformId:null, email:'—', password:'—'}
+      const platformName = (acc && acc.platformId) ? (state.platforms.find(p=>p.id===acc.platformId)||{name:'Subscription'}).name : (acc && acc.email ? '(assigned account)' : 'Subscription')
+      const expiryFormatted = c.expiryDate ? formatDateForMsg(c.expiryDate) : '—'
+      const daysVal = c.expiryDate ? daysLeft(c.expiryDate) : null
+      const greeting = c.name ? `Hi ${c.name},` : 'Hi there,'
+      let statusLine = ''
+      if(daysVal === null){
+        statusLine = `📅 We don't have an expiry date on file for your ${platformName} subscription.`
+      } else if(daysVal < 0){
+        const overdue = Math.abs(daysVal)
+        statusLine = `⚠️ Your ${platformName} subscription was due on ${expiryFormatted} — it has been due for ${overdue} day${overdue===1?'':'s'}.`
+      } else if(daysVal === 0){
+        statusLine = `⏳ Your ${platformName} subscription is due today (${expiryFormatted}).`
+      } else {
+        statusLine = `⏳ Your ${platformName} subscription is due in ${daysVal} day${daysVal===1?'':'s'} (on ${expiryFormatted}).`
+      }
+      const msg = `${greeting}
+
+🔔 Reminder — ${platformName} subscription
+${statusLine}
+
+Please renew to keep enjoying uninterrupted streaming. 🍿`
 
       if(confirm('Open WhatsApp to send reminder? (Cancel to copy)')) location.href = 'https://wa.me/?text=' + encodeURIComponent(msg)
       else robustCopy(msg).then(ok=> ok? toast('Copied reminder') : alert('Copy failed'))
@@ -1010,12 +915,6 @@ function renderBusiness(){
   const monthLabels = months.map(m=>{ const [y,mo]=m.split('-'); const d=new Date(y,parseInt(mo,10)-1); return d.toLocaleString(undefined,{month:'short',year:'2-digit'}) })
   drawBarChart('monthlyChart', monthLabels, monthCounts, 'New customers')
 }
-function parseMonthInputToRange(monthStr){ if(!monthStr) return null; const [y,mo] = monthStr.split('-'); const start = new Date(Number(y), Number(mo)-1, 1); const end = new Date(Number(y), Number(mo), 0); return {start, end} }
-document.getElementById('bizWeek')?.addEventListener('click', ()=>{ const now=new Date(); const start=new Date(now); start.setDate(now.getDate()-7); const end=new Date(now); applyBusinessRange(start,end) })
-document.getElementById('bizMonth')?.addEventListener('click', ()=>{ const now=new Date(); const start=new Date(now.getFullYear(), now.getMonth(), 1); const end=new Date(now.getFullYear(), now.getMonth()+1,0); applyBusinessRange(start,end) })
-document.getElementById('bizLastMonth')?.addEventListener('click', ()=>{ const now=new Date(); const start=new Date(now.getFullYear(), now.getMonth()-1, 1); const end=new Date(now.getFullYear(), now.getMonth(), 0); applyBusinessRange(start,end) })
-document.getElementById('bizShow')?.addEventListener('click', ()=>{ const f=document.getElementById('bizFrom').value; const t=document.getElementById('bizTo').value; if(!f||!t){ alert('Select From and To'); return } const r1=parseMonthInputToRange(f); const r2=parseMonthInputToRange(t); applyBusinessRange(r1.start, r2.end) })
-function applyBusinessRange(startDate, endDate){ const countsRange={}; state.platforms.forEach(p=> countsRange[p.name]=0); state.customers.forEach(c=>{ const created = c.createdAt ? new Date(c.createdAt) : (c.startDate? new Date(c.startDate) : null); if(!created) return; if(created >= startDate && created <= endDate){ if(c.accountId){ const acc = state.accounts.find(a=>a.id===c.accountId); if(acc){ const pname = (state.platforms.find(p=>p.id===acc.platformId)||{name:'Other'}).name; countsRange[pname] = (countsRange[pname]||0)+1 } } } }); const labels = Object.keys(countsRange); const data = labels.map(l=>countsRange[l]||0); drawBarChart('platformChart', labels, data, 'Customers'); const total = Object.values(countsRange).reduce((s,v)=>s+v,0); document.getElementById('businessStats').innerHTML = `<div>Customers in range: <strong>${total}</strong></div><div style="margin-top:6px">${Object.keys(countsRange).map(k=>`${esc(k)}: <strong>${countsRange[k]}</strong>`).join(' · ')}</div>` }
 function getLastNMonths(n){ const arr=[]; const now=new Date(); now.setDate(1); for(let i=n-1;i>=0;i--){ const d=new Date(now.getFullYear(), now.getMonth()-i,1); arr.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`) } return arr }
 
 // simple canvas bar chart
