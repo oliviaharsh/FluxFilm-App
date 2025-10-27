@@ -244,6 +244,33 @@ ${nm}📧 *Email:* ${(acc?.email)||'—'}
 🗓 *Expiry:* ${expiry}`
 }
 
+function templateCustomerReminder(c, acc){
+  const platformName = acc && acc.platformId ? (state.platforms.find(p=>p.id===acc.platformId)||{name:'Subscription'}).name : 'Subscription'
+  const expiryDate = c?.expiryDate || ''
+  const expiry = formatDateForMsg(expiryDate)
+  const days = expiryDate ? daysLeft(expiryDate) : null
+  const greeting = c?.name ? `Hi ${c.name}!` : 'Hi there!'
+  const statusVerb = (days !== null && days < 0) ? 'expired' : 'expires'
+  let dueLine = '⏰ Please renew your access at your earliest convenience.'
+  if(days === null){
+    dueLine = '⏰ Please renew your access at your earliest convenience.'
+  }else if(days < 0){
+    const overdue = Math.abs(days)
+    dueLine = `⏰ It has been due for ${overdue} day${overdue===1?'':'s'}.`
+  }else if(days === 0){
+    dueLine = '⏰ It expires today.'
+  }else{
+    dueLine = `⏰ Only ${days} day${days===1?'':'s'} left before it expires.`
+  }
+  return `🔔 *Renewal Reminder*
+
+${greeting} 😊
+Your *_${platformName}_* subscription ${statusVerb} on *${expiry}*.
+${dueLine}
+
+💳 Please renew to keep enjoying uninterrupted streaming.`
+}
+
 // NEW: format YYYY-MM-DD -> DD-MMM-YYYY (UI only)
 function fmtDate(dstr){
   if(!dstr) return ''
@@ -631,11 +658,10 @@ function renderCustomers(){
 
     // Remind with platform line and greeting
     const remind=document.createElement('button'); remind.className='small'; remind.textContent='Remind'
-    remind.onclick = ()=>{ 
-      const acc = accObj || {email:'—', platformId:null}; 
-      const msg = templateCustomers(c, acc)
-      const out = `🔔 Reminder\n\n${msg}`
-      if(confirm('Open WhatsApp to send reminder? (Cancel to copy)')) location.href = 'https://wa.me/?text=' + encodeURIComponent(out); else robustCopy(out).then(ok=> ok? toast('Copied reminder') : alert('Copy failed')) 
+    remind.onclick = ()=>{
+      const acc = accObj || {platformId:null};
+      const out = templateCustomerReminder(c, acc)
+      if(confirm('Open WhatsApp to send reminder? (Cancel to copy)')) location.href = 'https://wa.me/?text=' + encodeURIComponent(out); else robustCopy(out).then(ok=> ok? toast('Copied reminder') : alert('Copy failed'))
     }
 
     const del=document.createElement('button'); del.className='danger'; del.textContent='Delete'; del.onclick=()=>{ if(confirm('Delete this customer?')){ lastDeleted={type:'customer',data:c,time:Date.now()}; state.customers=state.customers.filter(x=>x.id!==c.id); state.accounts.forEach(a=>{ if(a.customers) a.customers=a.customers.filter(cid=>cid!==c.id) }); saveState(state); renderCustomers(); renderAll(); renderAccounts(); showUndo() } }
@@ -660,8 +686,8 @@ document.getElementById('bulkRemindBtn').onclick = ()=>{
   if(checks.length===0){ alert('Select customers first'); return }
   const msgs = checks.map(cb=>{
     const c = state.customers.find(x=>x.id===cb.dataset.id)
-    const acc = state.accounts.find(a=>a.id===c.accountId) || {email:'—', platformId:null}
-    return `🔔 Reminder\n\n${templateCustomers(c, acc)}`
+    const acc = state.accounts.find(a=>a.id===c.accountId) || {platformId:null}
+    return templateCustomerReminder(c, acc)
   })
   const combined = msgs.join('\n\n')
   if(confirm('Open WhatsApp to send combined message? (Cancel to copy)')) location.href = 'https://wa.me/?text=' + encodeURIComponent(combined); else robustCopy(combined).then(ok=> ok? toast('Copied') : alert('Copy failed'))
