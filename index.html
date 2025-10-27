@@ -190,6 +190,60 @@
 */
 
 const KEY='fluxfilm_v8_4_fix' // keep same storage key to preserve data
+const DEFAULT_PLATFORMS=[
+  {id:'p_netflix',name:'Netflix'},
+  {id:'p_prime',name:'Prime'},
+  {id:'p_hotstar',name:'Hotstar'},
+  {id:'p_yt',name:'YT Premium'}
+]
+
+function cloneDefaultPlatforms(){ return DEFAULT_PLATFORMS.map(p=>({...p})) }
+function createDefaultState(){ return {platforms:cloneDefaultPlatforms(),accounts:[],customers:[]} }
+
+function normalizeState(raw){
+  const base=createDefaultState()
+  if(!raw||typeof raw!=='object') return {state:base,changed:true}
+  let changed=false
+
+  let platforms
+  if(Array.isArray(raw.platforms)){
+    platforms=raw.platforms.filter(Boolean).map(p=>({...p}))
+    if(platforms.length!==raw.platforms.length) changed=true
+  }else{
+    platforms=base.platforms
+    changed=true
+  }
+
+  let accounts
+  if(Array.isArray(raw.accounts)){
+    accounts=raw.accounts.filter(Boolean).map(a=>{
+      const copy={...a}
+      if(Array.isArray(copy.customers)){
+        copy.customers=copy.customers.filter(Boolean)
+        if(a.customers && copy.customers.length!==a.customers.length) changed=true
+      }else{
+        copy.customers=[]
+        if(a&&a.customers&&a.customers.length) changed=true
+      }
+      return copy
+    })
+    if(accounts.length!==raw.accounts.length) changed=true
+  }else{
+    accounts=[]
+    changed=true
+  }
+
+  let customers
+  if(Array.isArray(raw.customers)){
+    customers=raw.customers.filter(Boolean).map(c=>({...c}))
+    if(customers.length!==raw.customers.length) changed=true
+  }else{
+    customers=[]
+    changed=true
+  }
+
+  return {state:{platforms,accounts,customers},changed}
+}
 
 // small util and logging
 function nowLog(s){ const p=document.getElementById('log'); p.textContent = new Date().toISOString().slice(11,19) + ' - ' + s + '\n' + p.textContent }
@@ -272,6 +326,35 @@ ${statusLine}
 💳 Please renew to keep enjoying uninterrupted streaming.`
 }
 
+function templateCustomerReminder(c, acc){
+  const platformName = acc && acc.platformId ? (state.platforms.find(p=>p.id===acc.platformId)||{name:'Subscription'}).name : 'Subscription'
+  const expiryDate = c?.expiryDate || ''
+  const expiry = formatDateForMsg(expiryDate)
+  const days = expiryDate ? daysLeft(expiryDate) : null
+  const greeting = c?.name ? `Hi ${c.name}!` : 'Hi there!'
+
+  let statusLine = '⚠️ Expiry date not recorded — please check and renew as soon as you can.'
+  if(days === null){
+    statusLine = '⚠️ Expiry date not recorded — please check and renew as soon as you can.'
+  }else if(days < 0){
+    const overdue = Math.abs(days)
+    statusLine = `⚠️ This subscription expired *${overdue} day${overdue===1?'':'s'}* ago.`
+  }else if(days === 0){
+    statusLine = '⚠️ This subscription expires *today*.'
+  }else{
+    statusLine = `⏳ Only *${days} day${days===1?'':'s'}* left before it expires.`
+  }
+
+  return `🔔 *Renewal Reminder*
+
+${greeting} 😊
+📺 Subscription: *_${platformName}_*
+🗓 *Expiry:* ${expiry}
+${statusLine}
+
+💳 Please renew to keep enjoying uninterrupted streaming.`
+}
+
 // NEW: format YYYY-MM-DD -> DD-MMM-YYYY (UI only)
 function fmtDate(dstr){
   if(!dstr) return ''
@@ -293,8 +376,25 @@ function fmtDate(dstr){
   return esc(dstr)
 }
 
-function loadState(){ try{ const raw = localStorage.getItem(KEY); if(raw) return JSON.parse(raw) }catch(e){} return { platforms:[ {id:'p_netflix',name:'Netflix'},{id:'p_prime',name:'Prime'},{id:'p_hotstar',name:'Hotstar'},{id:'p_yt',name:'YT Premium'} ], accounts:[], customers:[] } }
-function saveState(s){ localStorage.setItem(KEY, JSON.stringify(s)); nowLog('state saved') }
+function loadState(){
+  try{
+    const raw = localStorage.getItem(KEY)
+    if(raw){
+      const parsed = JSON.parse(raw)
+      const {state,changed} = normalizeState(parsed)
+      if(changed){ try{ localStorage.setItem(KEY, JSON.stringify(state)) }catch(e){} }
+      return state
+    }
+  }catch(e){}
+  const fresh = createDefaultState()
+  try{ localStorage.setItem(KEY, JSON.stringify(fresh)) }catch(e){}
+  return fresh
+}
+function saveState(s){
+  const {state} = normalizeState(s)
+  try{ localStorage.setItem(KEY, JSON.stringify(state)) }catch(e){}
+  nowLog('state saved')
+}
 
 let state = loadState()
 let selectedPlatformId = null
