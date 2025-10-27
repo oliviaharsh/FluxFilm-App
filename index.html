@@ -250,23 +250,25 @@ function templateCustomerReminder(c, acc){
   const expiry = formatDateForMsg(expiryDate)
   const days = expiryDate ? daysLeft(expiryDate) : null
   const greeting = c?.name ? `Hi ${c.name}!` : 'Hi there!'
-  const statusVerb = (days !== null && days < 0) ? 'expired' : 'expires'
-  let dueLine = '⏰ Please renew your access at your earliest convenience.'
+
+  let statusLine = '⚠️ Expiry date not recorded — please check and renew as soon as you can.'
   if(days === null){
-    dueLine = '⏰ Please renew your access at your earliest convenience.'
+    statusLine = '⚠️ Expiry date not recorded — please check and renew as soon as you can.'
   }else if(days < 0){
     const overdue = Math.abs(days)
-    dueLine = `⏰ It has been due for ${overdue} day${overdue===1?'':'s'}.`
+    statusLine = `⚠️ This subscription expired *${overdue} day${overdue===1?'':'s'}* ago.`
   }else if(days === 0){
-    dueLine = '⏰ It expires today.'
+    statusLine = '⚠️ This subscription expires *today*.'
   }else{
-    dueLine = `⏰ Only ${days} day${days===1?'':'s'} left before it expires.`
+    statusLine = `⏳ Only *${days} day${days===1?'':'s'}* left before it expires.`
   }
+
   return `🔔 *Renewal Reminder*
 
 ${greeting} 😊
-Your *_${platformName}_* subscription ${statusVerb} on *${expiry}*.
-${dueLine}
+📺 Subscription: *_${platformName}_*
+🗓 *Expiry:* ${expiry}
+${statusLine}
 
 💳 Please renew to keep enjoying uninterrupted streaming.`
 }
