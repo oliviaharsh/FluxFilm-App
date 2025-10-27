@@ -190,6 +190,109 @@
 */
 
 const KEY='fluxfilm_v8_4_fix' // keep same storage key to preserve data
+const DEFAULT_PLATFORMS=[
+  {id:'p_netflix',name:'Netflix'},
+  {id:'p_prime',name:'Prime'},
+  {id:'p_hotstar',name:'Hotstar'},
+  {id:'p_yt',name:'YT Premium'}
+]
+
+function cloneDefaultPlatforms(){ return DEFAULT_PLATFORMS.map(p=>({...p})) }
+function createDefaultState(){ return {platforms:cloneDefaultPlatforms(),accounts:[],customers:[]} }
+
+function normalizeState(raw){
+  const base=createDefaultState()
+  if(!raw||typeof raw!=='object') return {state:base,changed:true}
+  let changed=false
+
+  const toStringSafe=(val)=> val===undefined||val===null ? '' : String(val)
+
+  let platforms
+  if(Array.isArray(raw.platforms)){
+    platforms=raw.platforms.filter(p=>p && typeof p==='object').map(p=>{
+      const copy={
+        id: toStringSafe(p.id) || 'p_'+uid(),
+        name: toStringSafe(p.name) || 'Subscription',
+        imageUrl: p.imageUrl ? toStringSafe(p.imageUrl) : null
+      }
+      if(copy.id!==p.id || copy.name!==p.name || (p.imageUrl&&!copy.imageUrl)){ changed=true }
+      return copy
+    })
+    if(platforms.length!==raw.platforms.length) changed=true
+  }else{
+    platforms=base.platforms
+    changed=true
+  }
+
+  let accounts
+  if(Array.isArray(raw.accounts)){
+    accounts=raw.accounts.filter(a=>a && typeof a==='object').map(a=>{
+      const copy={...a}
+      copy.id = toStringSafe(copy.id) || 'a_'+uid()
+      copy.email = toStringSafe(copy.email)
+      copy.platformId = copy.platformId ? toStringSafe(copy.platformId) : null
+      copy.startDate = copy.startDate ? toStringSafe(copy.startDate) : ''
+      copy.expiryDate = copy.expiryDate ? toStringSafe(copy.expiryDate) : ''
+      copy.notes = copy.notes ? toStringSafe(copy.notes) : ''
+      if(!Array.isArray(copy.customers)){ copy.customers=[]; if(a&&a.customers&&a.customers.length) changed=true }
+      else{
+        const filtered=copy.customers.filter(x=>x && typeof x==='string')
+        if(filtered.length!==copy.customers.length){ copy.customers=filtered; changed=true }
+      }
+      if(copy.id!==a.id || copy.email!==a.email || copy.platformId!==a.platformId) changed=true
+      return copy
+    })
+    if(accounts.length!==raw.accounts.length) changed=true
+  }else{
+    accounts=[]
+    changed=true
+  }
+
+  let customers
+  if(Array.isArray(raw.customers)){
+    customers=raw.customers.filter(c=>c && typeof c==='object').map(c=>{
+      const copy={...c}
+      copy.id = toStringSafe(copy.id) || 'c_'+uid()
+      copy.name = toStringSafe(copy.name)
+      copy.phone = copy.phone ? toStringSafe(copy.phone) : ''
+      copy.profile = copy.profile ? toStringSafe(copy.profile) : ''
+      copy.startDate = copy.startDate ? toStringSafe(copy.startDate) : ''
+      copy.expiryDate = copy.expiryDate ? toStringSafe(copy.expiryDate) : ''
+      copy.notes = copy.notes ? toStringSafe(copy.notes) : ''
+      copy.private = !!copy.private
+      copy.accountId = copy.accountId ? toStringSafe(copy.accountId) : null
+      if(!Array.isArray(copy.accounts)){ copy.accounts=[]; if(c&&c.accounts&&c.accounts.length) changed=true }
+      else{
+        const filtered=copy.accounts.filter(x=>x && typeof x==='string')
+        if(filtered.length!==copy.accounts.length){ copy.accounts=filtered; changed=true }
+      }
+      if(copy.id!==c.id || copy.accountId!==c.accountId) changed=true
+      return copy
+    })
+    if(customers.length!==raw.customers.length) changed=true
+  }else{
+    customers=[]
+    changed=true
+  }
+
+  const platformIds=new Set(platforms.map(p=>p.id))
+  const accountIds=new Set(accounts.map(a=>a.id))
+  const customerIds=new Set(customers.map(c=>c.id))
+
+  accounts.forEach(acc=>{
+    if(acc.platformId && !platformIds.has(acc.platformId)){ acc.platformId=null; changed=true }
+    const filtered=acc.customers.filter(id=>customerIds.has(id))
+    if(filtered.length!==acc.customers.length){ acc.customers=filtered; changed=true }
+  })
+
+  customers.forEach(cust=>{
+    if(cust.accountId && !accountIds.has(cust.accountId)){ cust.accountId=null; changed=true }
+    const filtered=cust.accounts.filter(id=>accountIds.has(id))
+    if(filtered.length!==cust.accounts.length){ cust.accounts=filtered; changed=true }
+  })
+
+  return {state:{platforms,accounts,customers},changed}
+}
 
 // small util and logging
 function nowLog(s){ const p=document.getElementById('log'); p.textContent = new Date().toISOString().slice(11,19) + ' - ' + s + '\n' + p.textContent }
@@ -244,6 +347,41 @@ ${nm}📧 *Email:* ${(acc?.email)||'—'}
 🗓 *Expiry:* ${expiry}`
 }
 
+function templateCustomerReminder(c, acc){
+  const platformName = acc && acc.platformId ? (state.platforms.find(p=>p.id===acc.platformId)||{name:'Subscription'}).name : 'Subscription'
+  const expiryDate = c?.expiryDate || ''
+  const expiry = formatDateForMsg(expiryDate)
+  const days = expiryDate ? daysLeft(expiryDate) : null
+  const greeting = c?.name ? `Hi ${c.name}!` : 'Hi there!'
+
+  let statusLine = '⚠️ Expiry date not recorded — please check and renew as soon as you can.'
+  let callToAction = '💳 Please renew to keep enjoying uninterrupted streaming.'
+
+  if(days === null){
+    statusLine = '⚠️ Expiry date not recorded — please check and renew as soon as you can.'
+    callToAction = '💳 Please renew so we can keep your access active.'
+  }else if(days < 0){
+    const overdue = Math.abs(days)
+    statusLine = `⏰ This subscription has been due for *${overdue} day${overdue===1?'':'s'}* (expired on ${expiry}).`
+    callToAction = '💳 Please renew today so we can reactivate your access right away.'
+  }else if(days === 0){
+    statusLine = '⚠️ This subscription expires *today*.'
+    callToAction = '💳 A quick renewal now will keep everything running without interruption.'
+  }else{
+    statusLine = `⏳ Only *${days} day${days===1?'':'s'}* left before it expires.`
+    callToAction = '💳 Please renew soon to avoid any service break.'
+  }
+
+  return `🔔 *Renewal Reminder*
+
+${greeting} 😊
+📺 Subscription: *_${platformName}_*
+🗓 *Expiry Date:* ${expiry}
+${statusLine}
+
+${callToAction}`
+}
+
 // NEW: format YYYY-MM-DD -> DD-MMM-YYYY (UI only)
 function fmtDate(dstr){
   if(!dstr) return ''
@@ -265,8 +403,26 @@ function fmtDate(dstr){
   return esc(dstr)
 }
 
-function loadState(){ try{ const raw = localStorage.getItem(KEY); if(raw) return JSON.parse(raw) }catch(e){} return { platforms:[ {id:'p_netflix',name:'Netflix'},{id:'p_prime',name:'Prime'},{id:'p_hotstar',name:'Hotstar'},{id:'p_yt',name:'YT Premium'} ], accounts:[], customers:[] } }
-function saveState(s){ localStorage.setItem(KEY, JSON.stringify(s)); nowLog('state saved') }
+function loadState(){
+  try{
+    const raw = localStorage.getItem(KEY)
+    if(raw){
+      const parsed = JSON.parse(raw)
+      const {state,changed} = normalizeState(parsed)
+      if(changed){ try{ localStorage.setItem(KEY, JSON.stringify(state)) }catch(e){} }
+      return state
+    }
+  }catch(e){}
+  const fresh = createDefaultState()
+  try{ localStorage.setItem(KEY, JSON.stringify(fresh)) }catch(e){}
+  return fresh
+}
+function saveState(s){
+  const {state:normalized,changed} = normalizeState(s)
+  state = normalized
+  try{ localStorage.setItem(KEY, JSON.stringify(normalized)) }catch(e){}
+  nowLog(changed ? 'state sanitized + saved' : 'state saved')
+}
 
 let state = loadState()
 let selectedPlatformId = null
@@ -631,11 +787,10 @@ function renderCustomers(){
 
     // Remind with platform line and greeting
     const remind=document.createElement('button'); remind.className='small'; remind.textContent='Remind'
-    remind.onclick = ()=>{ 
-      const acc = accObj || {email:'—', platformId:null}; 
-      const msg = templateCustomers(c, acc)
-      const out = `🔔 Reminder\n\n${msg}`
-      if(confirm('Open WhatsApp to send reminder? (Cancel to copy)')) location.href = 'https://wa.me/?text=' + encodeURIComponent(out); else robustCopy(out).then(ok=> ok? toast('Copied reminder') : alert('Copy failed')) 
+    remind.onclick = ()=>{
+      const acc = accObj || {platformId:null};
+      const out = templateCustomerReminder(c, acc)
+      if(confirm('Open WhatsApp to send reminder? (Cancel to copy)')) location.href = 'https://wa.me/?text=' + encodeURIComponent(out); else robustCopy(out).then(ok=> ok? toast('Copied reminder') : alert('Copy failed'))
     }
 
     const del=document.createElement('button'); del.className='danger'; del.textContent='Delete'; del.onclick=()=>{ if(confirm('Delete this customer?')){ lastDeleted={type:'customer',data:c,time:Date.now()}; state.customers=state.customers.filter(x=>x.id!==c.id); state.accounts.forEach(a=>{ if(a.customers) a.customers=a.customers.filter(cid=>cid!==c.id) }); saveState(state); renderCustomers(); renderAll(); renderAccounts(); showUndo() } }
@@ -660,8 +815,8 @@ document.getElementById('bulkRemindBtn').onclick = ()=>{
   if(checks.length===0){ alert('Select customers first'); return }
   const msgs = checks.map(cb=>{
     const c = state.customers.find(x=>x.id===cb.dataset.id)
-    const acc = state.accounts.find(a=>a.id===c.accountId) || {email:'—', platformId:null}
-    return `🔔 Reminder\n\n${templateCustomers(c, acc)}`
+    const acc = state.accounts.find(a=>a.id===c.accountId) || {platformId:null}
+    return templateCustomerReminder(c, acc)
   })
   const combined = msgs.join('\n\n')
   if(confirm('Open WhatsApp to send combined message? (Cancel to copy)')) location.href = 'https://wa.me/?text=' + encodeURIComponent(combined); else robustCopy(combined).then(ok=> ok? toast('Copied') : alert('Copy failed'))
@@ -776,7 +931,7 @@ document.getElementById('bizWeek')?.addEventListener('click', ()=>{ const now=ne
 document.getElementById('bizMonth')?.addEventListener('click', ()=>{ const now=new Date(); const start=new Date(now.getFullYear(), now.getMonth(), 1); const end=new Date(now.getFullYear(), now.getMonth()+1,0); applyBusinessRange(start,end) })
 document.getElementById('bizLastMonth')?.addEventListener('click', ()=>{ const now=new Date(); const start=new Date(now.getFullYear(), now.getMonth()-1, 1); const end=new Date(now.getFullYear(), now.getMonth(), 0); applyBusinessRange(start,end) })
 document.getElementById('bizShow')?.addEventListener('click', ()=>{ const f=document.getElementById('bizFrom').value; const t=document.getElementById('bizTo').value; if(!f||!t){ alert('Select From and To'); return } const r1=parseMonthInputToRange(f); const r2=parseMonthInputToRange(t); applyBusinessRange(r1.start, r2.end) })
-function applyBusinessRange(startDate, endDate){ const countsRange={}; state.platforms.forEach(p=> countsRange[p.name]=0); state.customers.forEach(c=>{ const created = c.createdAt ? new Date(c.createdAt) : (c.startDate? new Date(c.startDate) : null); if(!created) return; if(created >= startDate && created <= endDate){ if(c.accountId){ const acc = state.accounts.find(a=>a.id===c.accountId); const pname = (state.platforms.find(p=>p.id===acc.platformId)||{name:'Other'}).name; countsRange[pname] = (countsRange[pname]||0)+1 } } }); const labels = Object.keys(countsRange); const data = labels.map(l=>countsRange[l]||0); drawBarChart('platformChart', labels, data, 'Customers'); const total = Object.values(countsRange).reduce((s,v)=>s+v,0); document.getElementById('businessStats').innerHTML = `<div>Customers in range: <strong>${total}</strong></div><div style="margin-top:6px">${Object.keys(countsRange).map(k=>`${esc(k)}: <strong>${countsRange[k]}</strong>`).join(' · ')}</div>` }
+function applyBusinessRange(startDate, endDate){ const countsRange={}; state.platforms.forEach(p=> countsRange[p.name]=0); state.customers.forEach(c=>{ const created = c.createdAt ? new Date(c.createdAt) : (c.startDate? new Date(c.startDate) : null); if(!created) return; if(created >= startDate && created <= endDate){ if(c.accountId){ const acc = state.accounts.find(a=>a.id===c.accountId); if(acc){ const pname = (state.platforms.find(p=>p.id===acc.platformId)||{name:'Other'}).name; countsRange[pname] = (countsRange[pname]||0)+1 } } } }); const labels = Object.keys(countsRange); const data = labels.map(l=>countsRange[l]||0); drawBarChart('platformChart', labels, data, 'Customers'); const total = Object.values(countsRange).reduce((s,v)=>s+v,0); document.getElementById('businessStats').innerHTML = `<div>Customers in range: <strong>${total}</strong></div><div style="margin-top:6px">${Object.keys(countsRange).map(k=>`${esc(k)}: <strong>${countsRange[k]}</strong>`).join(' · ')}</div>` }
 function getLastNMonths(n){ const arr=[]; const now=new Date(); now.setDate(1); for(let i=n-1;i>=0;i--){ const d=new Date(now.getFullYear(), now.getMonth()-i,1); arr.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`) } return arr }
 
 // canvas bar chart (unchanged)
