@@ -303,40 +303,6 @@ function templateCustomers(c, acc){
 ${nm}📧 *Email:* ${(acc?.email)||'—'}
 🔐 *Password:* ${(acc?.password)||'—'}
 🗓 *Expiry:* ${expiry}`
-// NEW: clean reminder message for a customer
-}
-  
-function reminderMessage(c, acc){
-  const plat = acc && acc.platformId
-    ? (state.platforms.find(p=>p.id===acc.platformId)||{name:'Subscription'}).name
-    : 'Subscription';
-
-  const expiryISO = c?.expiryDate || acc?.expiryDate || '';
-  const dueDate = formatDateForMsg(expiryISO);
-  const d = expiryISO ? daysLeft(expiryISO) : null;
-
-  const greet = c?.name ? `Hi ${c.name},` : 'Hi there,';
-
-  let status = '📅 We don’t have a due date on file. Please renew.';
-  if (d !== null) {
-    if (d < 0) {
-      const overdue = Math.abs(d);
-      status = `⚠️ Overdue by *${overdue} day${overdue===1?'':'s'}*.`;
-    } else if (d === 0) {
-      status = '⏳ Due *today*.';
-    } else {
-      status = `⏳ *${d} day${d===1?'':'s'}* left.`;
-    }
-  }
-
-  return `🔔 *Renewal Reminder*
-
-${greet}
-📺 Subscription: *_${plat}_*
-🗓 *Due date:* ${dueDate}
-${status}
-
-💳 Please renew to keep enjoying streaming.`;
 }
 
 function templateCustomerReminder(c, acc){
@@ -788,17 +754,33 @@ function renderCustomers(){
 
     // REMIND: Build an improved, human-friendly reminder message with emoji, platform name, due date and days overdue/left
     const remind=document.createElement('button'); remind.className='small'; remind.textContent='Remind'
-remind.onclick = ()=>{
-  const acc = accObj || { platformId:null, expiryDate:null };
-  const msg = reminderMessage(c, acc);
-  if (confirm('Open WhatsApp to send reminder? (Cancel to copy)')) {
-    location.href = 'https://wa.me/?text=' + encodeURIComponent(msg);
-  } else {
-    robustCopy(msg).then(ok => ok ? toast('Copied reminder') : alert('Copy failed'));
-  }
-  nowLog(`Prepared reminder for ${c.name || '(unknown)'} (single remind)`);
-};
+    remind.onclick = ()=>{
+      const acc = accObj || {platformId:null, email:'—', password:'—'}
+      const platformName = (acc && acc.platformId) ? (state.platforms.find(p=>p.id===acc.platformId)||{name:'Subscription'}).name : (acc && acc.email ? '(assigned account)' : 'Subscription')
+      const expiryFormatted = c.expiryDate ? formatDateForMsg(c.expiryDate) : '—'
+      const daysVal = c.expiryDate ? daysLeft(c.expiryDate) : null
+      const greeting = c.name ? `Hi ${c.name},` : 'Hi there,'
+      let statusLine = ''
+      if(daysVal === null){
+        statusLine = `📅 We don't have an expiry date on file for your ${platformName} subscription.`
+      } else if(daysVal < 0){
+        const overdue = Math.abs(daysVal)
+        statusLine = `⚠️ Your ${platformName} subscription was due on ${expiryFormatted} — it has been due for ${overdue} day${overdue===1?'':'s'}.`
+      } else if(daysVal === 0){
+        statusLine = `⏳ Your ${platformName} subscription is due today (${expiryFormatted}).`
+      } else {
+        statusLine = `⏳ Your ${platformName} subscription is due in ${daysVal} day${daysVal===1?'':'s'} (on ${expiryFormatted}).`
+      }
+      const msg = `${greeting}
 
+🔔 Reminder — ${platformName} subscription
+${statusLine}
+
+Please renew to keep enjoying uninterrupted streaming. 🍿`
+
+      if(confirm('Open WhatsApp to send reminder? (Cancel to copy)')) location.href = 'https://wa.me/?text=' + encodeURIComponent(msg)
+      else robustCopy(msg).then(ok=> ok? toast('Copied reminder') : alert('Copy failed'))
+      nowLog(`Prepared reminder for ${c.name || '(unknown)'} (${platformName})`)
     }
 
     const del=document.createElement('button'); del.className='danger'; del.textContent='Delete'; del.onclick=()=>{ if(confirm('Delete this customer?')){ lastDeleted={type:'customer',data:c,time:Date.now()}; state.customers = state.customers.filter(x=>x.id!==c.id); state.accounts.forEach(a=>{ if(a.customers) a.customers = a.customers.filter(cid=>cid!==c.id) }); saveState(state); renderCustomers(); renderAll(); renderAccounts(); nowLog('Deleted customer'); toast('Deleted') } }
@@ -818,7 +800,7 @@ document.getElementById('bulkRemindBtn').onclick = ()=>{
   const msgs = checks.map(cb=>{
     const c = state.customers.find(x=>x.id===cb.dataset.id)
     const acc = state.accounts.find(a=>a.id===c.accountId) || {platformId:null}
-    return reminderMessage(c, acc)
+    return templateCustomerReminder(c, acc)
   })
   const combined = msgs.join('\n\n')
   if(confirm('Open WhatsApp to send combined message? (Cancel to copy)')) location.href = 'https://wa.me/?text=' + encodeURIComponent(combined); else robustCopy(combined).then(ok=> ok? toast('Copied') : alert('Copy failed'))
