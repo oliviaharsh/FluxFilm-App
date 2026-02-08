@@ -56,6 +56,53 @@
   }
   /* image inside avatar img reset */
   .avatar img{width:100%;height:100%;object-fit:cover;display:block;border-radius:8px}
+  const API_URL = "PASTE_YOUR_APPS_SCRIPT_EXEC_URL_HERE";
+
+  async function loadSubs() {
+    const res = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "getSubscriptions" })
+    });
+
+    const data = await res.json();
+
+    if (!data.ok) {
+      alert("Failed to load data");
+      return;
+    }
+
+    renderTable(data.rows);
+  }
+
+  function renderTable(rows) {
+    const container = document.getElementById("data");
+    if (!rows.length) {
+      container.innerHTML = "<p>No data</p>";
+      return;
+    }
+
+    const headers = Object.keys(rows[0]);
+
+    let html = "<table border='1' cellpadding='6'><thead><tr>";
+    headers.forEach(h => html += `<th>${h}</th>`);
+    html += "</tr></thead><tbody>";
+
+    rows.forEach(r => {
+      html += "<tr>";
+      headers.forEach(h => html += `<td>${r[h]}</td>`);
+      html += "</tr>";
+    });
+
+    html += "</tbody></table>";
+    container.innerHTML = html;
+  }
+
+  loadSubs();
+  </script>
+
+  <div id="data">Loading…</div>
+
 </style>
 </head>
 <body>
@@ -69,6 +116,7 @@
       <div id="tabAccounts" class="tab">Accounts</div>
       <div id="tabCustomers" class="tab">Customers</div>
       <div id="tabBusiness" class="tab">Business</div>
+      <div id="data">Loading…</div>
     </div>
   </header>
 
