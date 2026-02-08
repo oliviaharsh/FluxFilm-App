@@ -192,23 +192,6 @@
 
 const KEY='fluxfilm_v8_4_fix' // keep same storage key to preserve data
 
-// ================== SHEET READ (ADMIN) ==================
-const ADMIN_API = "https://go.fluxfilm.in/api.php";
-const ADMIN_API_KEY = "FF_GO_2026_SUPER_SECRET_987654";
-
-async function loadCustomersFromSheet(){
-  nowLog("Loading SUBSCRIPTIONS from sheet...");
-  try{
-    const res = await fetch(ADMIN_API, {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({
-        apiKey: ADMIN_API_KEY,
-        action: "adminGetSubs",
-        args: []
-      })
-    });
-
     const data = await res.json();
     if(!data || !data.ok){
       nowLog("Sheet load failed");
